@@ -169,8 +169,9 @@ class MonitorService : Service() {
                         .setAutoCancel(true)
                         .build())
                     seen.add(id)
+                    Prefs.setSeen(this, seen)
                 }
-                Prefs.setSeen(this, seen)
+                Prefs.setSeen(this, seen, items.mapNotNull { it.s("id") })
             } catch (_: Exception) {
             }
             delay(30_000)

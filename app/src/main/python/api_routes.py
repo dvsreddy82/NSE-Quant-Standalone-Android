@@ -8,6 +8,7 @@ for the companion app) and by the standalone Android app (called in-process).
 from __future__ import annotations
 
 import hashlib
+import re
 import math
 import threading
 import time
@@ -48,6 +49,12 @@ def _alert_out(a: dict) -> dict:
 
 def _id(*parts) -> str:
     return hashlib.sha1("|".join(str(p) for p in parts).encode()).hexdigest()[:12]
+
+
+def _kind(text: str) -> str:
+    """The wording of an alert without its live numbers, so the id stays the same while prices move."""
+    head = text.split(":")[0] if ":" in text[:48] else text
+    return re.sub(r"[-+]?[\d.,]+[%×x]?", "#", head).strip()[:60]
 
 
 
@@ -244,12 +251,12 @@ class ApiRoutes:
         for und, r in self.win.risk_view.results.items():
             for a in r["alerts"]:
                 if a["level"] in ("RED", "AMBER"):
-                    items.append({"id": _id("risk", und, a["level"], a["title"]), "level": a["level"],
+                    items.append({"id": _id("risk", date.today(), und, a["level"], a["title"]), "level": a["level"],
                                   "source": "Writer risk monitor", "title": f"{und}: {a['title']}",
                                   "text": " · ".join(a["signals"][:2]) + f" → {a['action']}"})
         acc = getattr(self.win, "_account", None) or {}
         for a in acc.get("alerts", []):
-            items.append({"id": _id("acct", date.today(), a["title"]), "level": a["level"], "source": "Account limits",
+            items.append({"id": _id("acct", date.today(), _kind(a["title"])), "level": a["level"], "source": "Account limits",
                           "title": a["title"], "text": a["text"]})
         sync = self.win.sync_svc.last.get("setup_alert") or {}
         if getattr(self.win, "_setup_active", None) and sync.get("key"):
@@ -259,12 +266,12 @@ class ApiRoutes:
         if self.win.bnf_svc.symbols:
             for lv, t in self.win.bnf_svc.live_snapshot()["alerts"]:
                 if lv == "red":
-                    items.append({"id": _id("bnf", t.split(" ")[0], t[:40]), "level": "RED",
+                    items.append({"id": _id("bnf", date.today(), _kind(t)), "level": "RED",
                                   "source": "BANKNIFTY monitor", "title": "BANKNIFTY breadth", "text": t})
         for g in (self.win.trades.data or {}).get("positions") or []:
             for a, t in g["alerts"]:
                 if a == "stop":
-                    items.append({"id": _id("pos", g["und"], g["expiry"], t[:50]), "level": "RED",
+                    items.append({"id": _id("pos", date.today(), g["und"], g["expiry"], _kind(t)), "level": "RED",
                                   "source": "My positions", "title": f"EXIT · {g['und']} {g['structure']}", "text": t})
         for d in self.win.news_svc.recent(hours=6, impact="HIGH", limit=40):
             if d.get("alerted"):
