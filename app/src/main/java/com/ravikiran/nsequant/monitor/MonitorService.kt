@@ -156,15 +156,16 @@ class MonitorService : Service() {
                 }
                 fresh.filter { (it.s("id") ?: "") !in seen }.forEach { a ->
                     val id = a.s("id") ?: return@forEach
-                    nm.notify(id.hashCode(), NotificationCompat.Builder(this, CH_ALERTS)
+                    val info = a.s("level") == "WRITER" && a.s("severity") == "INFO"
+                    nm.notify(id.hashCode(), NotificationCompat.Builder(this, if (info) CH_WRITER_INFO else CH_ALERTS)
                         .setSmallIcon(R.drawable.ic_stat_ticker)
                         .setWhen(epoch(a.s("at")))
                         .setShowWhen(true)
                         .setContentTitle("${tag(a.s("level"))} ${a.s("title")}")
                         .setContentText(a.s("text"))
                         .setStyle(NotificationCompat.BigTextStyle().bigText("${a.s("text")}\n— ${a.s("source")}"))
-                        .setPriority(NotificationCompat.PRIORITY_HIGH)
-                        .setCategory(NotificationCompat.CATEGORY_ALARM)
+                        .setPriority(if (info) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
+                        .setCategory(if (info) NotificationCompat.CATEGORY_RECOMMENDATION else NotificationCompat.CATEGORY_ALARM)
                         .setContentIntent(a.s("link")?.takeIf { it.startsWith("http") }?.let { openLink(it, id) } ?: openApp())
                         .setAutoCancel(true)
                         .build())
@@ -185,7 +186,7 @@ class MonitorService : Service() {
     }
 
     private fun tag(level: String?) = when (level) {
-        "RED" -> "🔴"; "AMBER" -> "🟠"; "SETUP" -> "⚑"; "NEWS" -> "📰"; "GLOBAL" -> "🌐"; "LEVEL" -> "📉"; else -> "•"
+        "RED" -> "🔴"; "AMBER" -> "🟠"; "SETUP" -> "⚑"; "NEWS" -> "📰"; "GLOBAL" -> "🌐"; "LEVEL" -> "📉"; "WRITER" -> "✍"; else -> "•"
     }
 
     private fun openLink(url: String, id: String): PendingIntent = PendingIntent.getActivity(this, id.hashCode(),
@@ -275,7 +276,9 @@ class MonitorService : Service() {
                 lockscreenVisibility = Notification.VISIBILITY_PRIVATE
             })
         nm.createNotificationChannel(NotificationChannel(CH_ALERTS, "Risk alerts", NotificationManager.IMPORTANCE_HIGH)
-            .apply { description = "RED risk alerts, level breaks, global moves, evening setups, EXIT signals" })
+            .apply { description = "RED risk alerts, writer signals, level breaks, global moves, evening setups, EXIT signals" })
+        nm.createNotificationChannel(NotificationChannel(CH_WRITER_INFO, "Writer info", NotificationManager.IMPORTANCE_DEFAULT)
+            .apply { description = "Profit targets, writing conditions, max pain, expected move — useful, not urgent" })
         nm.createNotificationChannel(NotificationChannel(CH_DIRECTION, "Direction calls", NotificationManager.IMPORTANCE_DEFAULT)
             .apply { description = "NIFTY / BANKNIFTY direction every 15 minutes in market hours (sound when it changes)" })
     }
@@ -284,6 +287,7 @@ class MonitorService : Service() {
         private const val CH_TICKER = "ticker_live"
         private const val CH_ALERTS = "alerts"
         private const val CH_DIRECTION = "direction"
+        private const val CH_WRITER_INFO = "writer_info"
         private const val TICKER_ID = 1001
         private const val DIR_NIFTY_ID = 1101
         private const val DIR_BNF_ID = 1102

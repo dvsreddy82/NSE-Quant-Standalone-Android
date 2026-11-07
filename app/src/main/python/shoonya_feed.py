@@ -189,6 +189,7 @@ class ShoonyaFeed:
         self._stop = threading.Event()
         self._ws_lock = threading.Lock()
         self._jkey_routes: set[str] = set()                # routes that refused the Bearer form
+        self._futs: dict[str, tuple[str | None, date]] = {}  # underlying -> (near-month future key, day looked up)
 
     @property
     def logged_in(self) -> bool:
@@ -348,6 +349,32 @@ class ShoonyaFeed:
         if symbol == "INDIA VIX":
             return VIX_TOKEN
         return self.symbol_keys.get(symbol) or INDEX_TOKENS.get(symbol)
+
+    def future_key(self, underlying: str) -> str | None:
+        """Near-month index future ("NFO|token") for NIFTY / BANKNIFTY: looked up once a day by
+        scrip search, then subscribed so its ticks carry price and open interest (oi / poi)."""
+        today = date.today()
+        hit = self._futs.get(underlying)
+        if hit is None or hit[1] != today:
+            best = None
+            try:
+                r = self._post("SearchScrip", {"exch": "NFO", "stext": f"{underlying} FUT"})
+                for v in r.get("values") or []:
+                    if v.get("instname") != "FUTIDX" or (v.get("symname") or "").upper() != underlying:
+                        continue
+                    try:
+                        exd = datetime.strptime(v["exd"], "%d-%b-%Y").date()
+                    except (KeyError, ValueError):
+                        continue
+                    if exd >= today and (best is None or exd < best[0]):
+                        best = (exd, f"NFO|{v['token']}")
+            except Exception as exc:
+                log.info("Future lookup for %s failed: %s", underlying, exc)
+            hit = (best[1] if best else None, today)
+            self._futs[underlying] = hit
+        if hit[0]:
+            self.watch([hit[0]])
+        return hit[0]
 
     def watch(self, keys) -> None:
         """Subscribe extra instruments (e.g. open-position legs) for live prices."""

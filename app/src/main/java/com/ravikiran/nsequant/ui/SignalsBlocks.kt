@@ -68,6 +68,14 @@ fun SignalsBlock(sig: JSONObject) {
         sig.arr("alerts").objects().take(3).forEach { a ->
             AlertCard(if (a.s("level") == "HIGH") "RED" else "AMBER", a.s("title") ?: "", listOf(a.s("text") ?: ""))
         }
+        val wr = sig.arr("writer").objects()
+        if (wr.isNotEmpty()) {
+            Text("Writer signals today (${wr.size}) · newest first", color = Pal.muted, fontSize = 12.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+            wr.take(8).forEach { a ->
+                AlertCard(a.s("level") ?: "AMBER", "✍ " + (a.s("title") ?: ""), listOf(a.s("text") ?: ""))
+            }
+        }
     }
 }
 

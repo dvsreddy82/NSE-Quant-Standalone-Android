@@ -65,7 +65,9 @@ fun HomeScreen(monitorOn: Boolean, onMonitor: (Boolean) -> Unit) {
                 Section("Active alerts (${items.size}) · newest first") {
                     if (items.isEmpty()) Text("None right now.", color = Pal.muted, fontSize = 12.sp)
                     items.forEach { x ->
-                        AlertCard(x.s("level") ?: "", x.s("title") ?: "", listOfNotNull(x.s("text")),
+                        val wr = x.s("level") == "WRITER"
+                        AlertCard(if (wr) x.s("severity") ?: "AMBER" else x.s("level") ?: "",
+                            (if (wr) "✍ " else "") + (x.s("title") ?: ""), listOfNotNull(x.s("text")),
                             listOfNotNull(hhmm(x.s("at")), x.s("source")).joinToString(" · "))
                     }
                 }

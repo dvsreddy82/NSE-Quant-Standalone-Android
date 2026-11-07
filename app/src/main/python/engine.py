@@ -607,6 +607,7 @@ class Engine:
         opts, svc, trades = self.options, self.svc, self.trades_svc
         td = self.trades.data or {}
         limits, today = dict(td.get("limits") or {}), dict(td.get("today") or {})
+        orders = list(td.get("orders") or [])
         capital = config.TRADING_CAPITAL or _num(limits.get("margin_used")) + _num(limits.get("available"))
 
         def job():
@@ -616,7 +617,7 @@ class Engine:
             if book is None:
                 docs = svc.store.find_docs("broker_positions", sort="date", desc=True, limit=1)
                 book = docs[0].get("rows") if docs else []
-            out = {}
+            out, wctx = {}, {}
             for und, sym in (("NIFTY", "^NSEI"), ("BANKNIFTY", "NIFTY BANK")):
                 try:
                     res = opts.fresh(und, 45) or opts.analyse(und)
@@ -646,8 +647,15 @@ class Engine:
                     r["alerts"] += [a for b in books for a in book_risk.book_alerts(b, capital)]
                     out[und] = r
                     self.fii_view.zone_res[und] = res
+                    wctx[und] = {"res": res, "chains": {res["expiry"]: res, **chains},
+                                 "groups": [g for g in groups if g["und"] == und], "books": books}
                 except Exception as exc:
                     log.warning("risk %s failed: %s", und, exc)
+            try:
+                for a in self.watch.check_writer(wctx, self.broker.feed, orders):
+                    self.status(f"Writer signal: {a['title']}")
+            except Exception as exc:
+                log.warning("writer signals failed: %s", exc)
             return out
 
         def done(out):

@@ -18,6 +18,7 @@ import pandas as pd
 
 import config
 import market_watch as mw
+import writer_signals as ws
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class WatchService:
         self._lock = threading.Lock()
         self._seen: set[str] = set()
         self._orange: dict[str, tuple[float, float]] = {}
+        self.writer = ws.WriterWatch(svc.store)
 
     @property
     def store(self):
@@ -162,6 +164,29 @@ class WatchService:
 
     def level_status(self, und: str) -> dict:
         return self.watcher.status.get(und, {})
+
+    # ---------------------------------------------------------------- writer signals (blocking)
+    def check_writer(self, ctx: dict, feed=None, orders: list[dict] | None = None) -> list[dict]:
+        """Writer decision signals (writer_signals.py) on the risk check's chains and books;
+        VIX and near-month futures come from Shoonya's live ticks when it is connected."""
+        vix, futs = None, {}
+        if feed is not None and getattr(feed, "live", False):
+            from shoonya_feed import VIX_TOKEN
+            vix = feed.tick(VIX_TOKEN)
+            for und in ctx:
+                try:
+                    key = feed.future_key(und)
+                except Exception as exc:
+                    log.info("future key %s: %s", und, exc)
+                    key = None
+                t = feed.tick(key) if key else None
+                if t:
+                    futs[und] = t
+        try:
+            pnl = self.store.find_docs("pnl_daily", sort="date", desc=True, limit=10)
+        except Exception:
+            pnl = []
+        return self._fresh_ids(self.writer.check(ctx, vix, futs, pnl, orders or []))
 
     # ---------------------------------------------------------------- 15-minute direction call (blocking)
     def make_call(self, und: str, slot: datetime, risk: dict | None) -> dict:

@@ -243,7 +243,8 @@ class ApiRoutes:
                         "hits": right, "graded": n,
                         "levels": [{"name": m["name"], "also": m.get("also", []), "price": m["price"],
                                     "status": st.get(round(m["price"]))} for m in w.levels.get(und) or []]}
-        return {**out, "alerts": [_alert_out(a) for a in w.recent_alerts(1, ("LEVEL",))], "time": datetime.now()}
+        return {**out, "alerts": [_alert_out(a) for a in w.recent_alerts(1, ("LEVEL",))],
+                "writer": [_alert_out(a) for a in w.recent_alerts(1, ("WRITER",))], "time": datetime.now()}
 
     def alerts(self, _q):
         """Every active alert with a stable id; the phone raises a notification for unseen ids."""
@@ -281,6 +282,9 @@ class ApiRoutes:
                                                                    if t in ("BANKNIFTY", "NIFTY", "RBI", "MACRO")),
                               "text": d["title"] + extra, "link": d.get("link")})
         w = self.win.watch
+        for a in w.recent_alerts(1, ("WRITER",)):
+            items.append({"id": a["id"], "level": "WRITER", "source": "Writer signals", "title": a["title"],
+                          "text": a["text"], "severity": a.get("level"), "signal": a.get("signal")})
         for a in w.recent_alerts(1, ("GLOBAL", "LEVEL")):
             ts = pd.Timestamp(a["raised_at"])
             age = (pd.Timestamp.now(tz="UTC") - (ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC"))).total_seconds()
@@ -297,7 +301,7 @@ class ApiRoutes:
         now = datetime.now().astimezone()
         news_at = {_id("news", d["id"]): d.get("alerted_at") or d.get("published")
                    for d in self.win.news_svc.recent(hours=6, impact="HIGH", limit=40) if d.get("alerted")}
-        raised = {a["id"]: a.get("raised_at") for a in w.recent_alerts(1, ("GLOBAL", "LEVEL"))}
+        raised = {a["id"]: a.get("raised_at") for a in w.recent_alerts(1, ("GLOBAL", "LEVEL", "WRITER"))}
         for it in items:
             t = raised.get(it["id"]) or news_at.get(it["id"])
             if it["level"] == "DIRECTION":

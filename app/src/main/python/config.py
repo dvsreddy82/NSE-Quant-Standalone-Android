@@ -154,6 +154,23 @@ DAILY_LOSS_LIMIT_PCT: float = _env("DAILY_LOSS_LIMIT_PCT", 2.0)    # stop adding
 MOVE_LOSS_LIMIT_PCT: float = _env("MOVE_LOSS_LIMIT_PCT", 3.0)      # worst P&L of a book for a 4% move
 MAX_MARGIN_USE_PCT: float = _env("MAX_MARGIN_USE_PCT", 60.0)       # keep a buffer for gap margin calls
 BOOK_DELTA_LOTS: float = _env("BOOK_DELTA_LOTS", 3.0)              # net delta per book, in index lots
+# writer signals (writer_signals.py)
+PROFIT_TAKE_PCT: float = _env("PROFIT_TAKE_PCT", 50.0)             # % of the credit captured: consider booking
+PROFIT_TAKE_HIGH_PCT: float = _env("PROFIT_TAKE_HIGH_PCT", 70.0)   # … and the strong nudge
+SHORT_DELTA_WARN: float = _env("SHORT_DELTA_WARN", 0.30)           # short leg delta: plan a roll
+SHORT_DELTA_EXIT: float = _env("SHORT_DELTA_EXIT", 0.40)           # short leg delta: act
+VIX_SPIKE_PCT: float = _env("VIX_SPIKE_PCT", 8.0)                  # India VIX up this % on the day
+ATM_IV_SPIKE_PTS: float = _env("ATM_IV_SPIKE_PTS", 2.0)            # ATM IV up this many points since the open
+EXPIRY_GAMMA_PCT: float = _env("EXPIRY_GAMMA_PCT", 0.5)            # expiry day after 13:00: spot this close to a short
+TIME_EXIT_DTE: int = _env("TIME_EXIT_DTE", 2)                      # days to expiry for the time-based exit
+TIME_EXIT_PCT: float = _env("TIME_EXIT_PCT", 1.0)                  # … with a short strike this close (% of spot)
+PCR_HIGH: float = _env("PCR_HIGH", 1.5)
+PCR_LOW: float = _env("PCR_LOW", 0.6)
+SKEW_RISE_PTS: float = _env("SKEW_RISE_PTS", 2.0)                  # put-minus-call IV up this much since the open
+FUT_PRICE_PCT: float = _env("FUT_PRICE_PCT", 0.3)                  # futures buildup: price move on the day
+FUT_OI_PCT: float = _env("FUT_OI_PCT", 2.0)                        # … and open-interest change on the day
+LOSING_STREAK_DAYS: int = _env("LOSING_STREAK_DAYS", 3)
+MAX_ORDERS_PER_DAY: int = _env("MAX_ORDERS_PER_DAY", 12)           # executed orders before the overtrading nudge
 # Statutory charges (fractions of premium / turnover) used to estimate net P&L.
 # NSE / SEBI revise these; update here if they change.
 CHARGES = {
