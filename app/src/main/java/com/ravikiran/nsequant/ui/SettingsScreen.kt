@@ -150,6 +150,7 @@ fun SettingsScreen(onDone: () -> Unit) {
         Text("Keep Market monitor on so the engine keeps running in the background (Android stops apps that aren't " +
             "in use). Allow the app to run in the background in battery settings for alerts while the screen is off.",
             color = Pal.faint, fontSize = 11.sp)
+        LockScreenCheck()
 
         Text("Engine activity", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         events.take(12).forEach { e ->

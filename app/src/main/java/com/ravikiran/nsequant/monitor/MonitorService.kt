@@ -109,7 +109,7 @@ class MonitorService : Service() {
                     when (t.s("setup")) { "up" -> add("⚑▲ setup"); "down" -> add("⚑▼ setup") }
                 }.joinToString(" · ")
                 nm.notify(TICKER_ID, ticker(title, listOf(rest, extra).filter { it.isNotBlank() }.joinToString("\n"),
-                    icon, rest))
+                    icon, rest, bnf?.let { "BNF ${Fmt.pct(it.d("pct"))}" }))
             } catch (e: Exception) {
                 nm.notify(TICKER_ID, ticker("Waiting for prices", e.message ?: ""))
             }
@@ -232,7 +232,8 @@ class MonitorService : Service() {
         return IconCompat.createWithBitmap(bmp)
     }
 
-    private fun ticker(title: String, text: String, icon: IconCompat? = null, publicText: String = ""): Notification {
+    private fun ticker(title: String, text: String, icon: IconCompat? = null, publicText: String = "",
+                       chip: String? = null): Notification {
         val small = icon ?: IconCompat.createWithResource(this, R.drawable.ic_stat_ticker)
         // lock screen with "hide sensitive content": prices only, never P&L
         val pub = NotificationCompat.Builder(this, CH_TICKER)
@@ -249,8 +250,14 @@ class MonitorService : Service() {
             .setContentText(text.lineSequence().firstOrNull() ?: "")
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
+            .setOnlyAlertOnce(true)                    // no setSilent(): some phones file "silent" ones off the lock screen
+            .setShowWhen(false)
+            // Android 16 Live Update: pinned at the top of the lock screen with a status-bar chip
+            // (EXTRA_REQUEST_PROMOTED_ONGOING / EXTRA_SHORT_CRITICAL_TEXT; ignored by older Android)
+            .addExtras(android.os.Bundle().apply {
+                putBoolean("android.requestPromotedOngoing", true)
+                chip?.let { putString("android.shortCriticalText", it) }
+            })
             .setContentIntent(openApp())
             .addAction(0, "Stop monitor", PendingIntent.getService(this, 1,
                 Intent(this, MonitorService::class.java).setAction(ACTION_STOP),
@@ -284,7 +291,8 @@ class MonitorService : Service() {
     }
 
     companion object {
-        private const val CH_TICKER = "ticker_live"
+        const val TICKER_CHANNEL = "ticker_live"
+        private const val CH_TICKER = TICKER_CHANNEL
         private const val CH_ALERTS = "alerts"
         private const val CH_DIRECTION = "direction"
         private const val CH_WRITER_INFO = "writer_info"
@@ -294,6 +302,7 @@ class MonitorService : Service() {
         private const val GLOBAL_SUM_ID = 1103
         private const val ACTION_STOP = "stop"
         @Volatile private var running = false
+        val isRunning: Boolean get() = running
 
         fun start(ctx: Context) = ContextCompat.startForegroundService(ctx, Intent(ctx, MonitorService::class.java))
         fun stop(ctx: Context) { ctx.stopService(Intent(ctx, MonitorService::class.java)) }
