@@ -58,7 +58,7 @@ fun GlobalScreen() {
                 }
             }
             item {
-                Text("Yahoo Finance quotes, checked every 5 min around the clock. Change is against each " +
+                Text("GIFT Nifty from sgxnifty.org, the rest from Yahoo Finance, checked every 5 min around the clock. Change is against each " +
                     "market's previous close (US 10Y in basis points); bold = past its alert threshold. Context for " +
                     "the session, not a forecast." +
                     (g.s("checked_at")?.let { "  Checked ${it.substring(11, 16)}." } ?: ""),
@@ -86,8 +86,16 @@ private fun CueBlock(g: JSONObject) {
             Text(cue.s("read") ?: "—", color = col, fontWeight = FontWeight.ExtraBold, fontSize = 24.sp)
             Text("score ${Fmt.signed(score, 0)} (−100…+100)", color = Pal.muted, fontSize = 12.sp)
         }
+        cue.obj("gift")?.takeIf { !it.b("stale") }?.let { gf ->
+            val gp = gf.d("gap_pct")
+            Text("GIFT Nifty ${Fmt.px(gf.d("last"))}  ${Fmt.pct(gf.d("pct"))}" +
+                (gf.s("open")?.let { o -> "  →  $o open (${Fmt.signed(gf.d("gap"), 0)} pts vs NIFTY close)" } ?: ""),
+                color = if ((gp ?: 0.0) >= 0.2) Pal.up else if ((gp ?: 0.0) <= -0.1) Pal.down else Pal.text,
+                fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        }
         cue.s("writer")?.let { Text("Writer read: $it", fontSize = 13.sp) }
-        cue.arr("drivers").strings().forEach { Text("• $it", color = Pal.muted, fontSize = 12.sp) }
+        cue.arr("drivers").strings().filterNot { it.startsWith("GIFT Nifty") }
+            .forEach { Text("• $it", color = Pal.muted, fontSize = 12.sp) }
         val failed = g.arr("failed").strings()
         if (failed.isNotEmpty()) Text("Unavailable: ${failed.joinToString(", ")}", color = Pal.warn, fontSize = 11.sp)
     }

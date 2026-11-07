@@ -84,7 +84,7 @@ class WatchService:
         quotes, failed = mw.fetch_global()
         if not quotes:                                            # offline: last stored session per instrument
             quotes = self.stored_global()
-        cue = mw.global_cue(quotes)
+        cue = mw.global_cue(quotes, self._nifty_close())
         with self._lock:
             self.quotes, self.failed, self.cue = quotes, failed, cue
             self.global_at = datetime.now()
@@ -96,6 +96,19 @@ class WatchService:
             except Exception as exc:
                 log.warning("global_quotes not stored: %s", exc)
         return quotes, self._fresh_ids(mw.global_alerts(live))
+
+    def _nifty_close(self) -> float | None:
+        """NIFTY's last completed close (today's close once the session has ended)."""
+        try:
+            d = self.svc.load_ohlcv("^NSEI", "1D")
+        except Exception:
+            return None
+        if d is None or not len(d):
+            return None
+        now = mw.now_ist()
+        if (now.hour, now.minute) < (15, 30):
+            d = d[[ts.date() < now.date() for ts in d.index]]
+        return float(d["close"].iloc[-1]) if len(d) else None
 
     def stored_global(self) -> list[dict]:
         try:

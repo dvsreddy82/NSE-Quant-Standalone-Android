@@ -38,6 +38,7 @@ CHART = "https://{}.finance.yahoo.com/v8/finance/chart/{}"
 # key, name, Yahoo ticker, group, unit ("pct" or "bps" for yields), alert threshold, weight in the India cue
 # (positive weight: up is good for Indian equities; negative: up is bad)
 GLOBAL = [
+    ("GIFT", "GIFT Nifty", "sgxnifty.org", "India (GIFT City)", "pct", 0.6, 3.0),
     ("ES", "S&P 500 futures", "ES=F", "US futures", "pct", 0.8, 2.0),
     ("NQ", "Nasdaq 100 futures", "NQ=F", "US futures", "pct", 1.0, 1.0),
     ("YM", "Dow futures", "YM=F", "US futures", "pct", 0.8, 0.5),
@@ -60,11 +61,63 @@ GLOBAL = [
 ]
 GLOBAL_BY_KEY = {g[0]: g for g in GLOBAL}
 STALE_HOURS = 20          # a quote older than this belongs to a session that is not the latest
+GIFT_URL = "https://sgxnifty.org/"     # GIFT Nifty (NSE IX, near-month NIFTY future): Yahoo has no reliable feed
 
 
 # ====================================================================== global markets
+def _num(txt: str) -> float:
+    return float(txt.replace(",", "").replace("+", "").replace("%", "").strip())
+
+
+def _gift(g) -> dict:
+    """GIFT Nifty from sgxnifty.org's page: last trade, change, high / low / open, the time of the
+    last trade and the intraday line.  GIFT trades ~6:30 am – 3:40 pm and 4:35 pm – 2:45 am IST,
+    so a session runs from the morning to the small hours of the next day."""
+    import json
+    import re
+    key, name, src, group, unit, thr, _w = g
+    r = requests.get(GIFT_URL, headers=UA, timeout=15)
+    r.raise_for_status()
+    h = r.text
+    cells = re.findall(r'class="main-change[^"]*">(?:\s*<i[^>]*></i>)?\s*([-+0-9.,%]+)\s*</td>', h)
+    if len(cells) < 3:
+        raise ValueError("GIFT Nifty quote not found on the page")
+    last, chg, pct = _num(cells[0]), _num(cells[1]), _num(cells[2])
+    if "negative" in h[h.find("main-change"):h.find("main-change") + 40] and chg > 0:
+        chg, pct = -chg, -pct
+    sub = [_num(x) for x in re.findall(r'class="main-sub">\s*([0-9.,]+)\s*</td>', h)[:3]]
+    high, low, open_ = (sub + [None] * 3)[:3]
+    m = re.search(r"As on \w+, (\d{1,2} \w{3} \d{4})", h)
+    year = pd.Timestamp(m.group(1)).year if m else date.today().year
+    m = re.search(r"Last Trade on (\d{1,2} \w{3}) (\d{1,2}:\d{2} [AP]M)", h)
+    at = None
+    if m:
+        t = pd.Timestamp(f"{m.group(1)} {year} {m.group(2)}", tz=config.IST)
+        if t > pd.Timestamp.now(tz=config.IST) + pd.Timedelta(days=2):      # "As on" in January, trade in December
+            t = t - pd.DateOffset(years=1)
+        at = t.to_pydatetime()
+    spark = []
+    m = re.search(r"chartIntradayData\s*=\s*(\[.*?\]);", h, re.S)
+    if m:
+        try:
+            pts = [float(x["value"]) for x in json.loads(m.group(1))]
+            spark = pts[::5][-78:]                                         # ~5-minute steps
+        except (ValueError, KeyError):
+            spark = []
+    prev = last - chg
+    session = (pd.Timestamp(at) - pd.Timedelta(hours=6, minutes=30)).date() if at else None
+    return {"key": key, "name": name, "ticker": "GIFT NIFTY", "group": group, "unit": unit, "threshold": thr,
+            "last": last, "prev": prev, "chg": chg, "pct": pct, "move": pct, "at": at,
+            "high": high, "low": low, "open": open_,
+            "session": str(session) if session else None,
+            "stale": at is None or (time.time() - at.timestamp()) > STALE_HOURS * 3600,
+            "spark": spark}
+
+
 def _one(g) -> dict:
     key, name, tk, group, unit, thr, _w = g
+    if key == "GIFT":
+        return _gift(g)
     for host in ("query1", "query2", "query1"):
         r = requests.get(CHART.format(host, tk), params={"range": "1d", "interval": "5m"}, headers=UA, timeout=12)
         if r.status_code != 429:
@@ -146,8 +199,29 @@ def global_alerts(quotes: list[dict]) -> list[dict]:
     return out
 
 
-def global_cue(quotes: list[dict]) -> dict:
-    """Weighted read of the latest sessions for India's next open: score −100…+100."""
+def gift_read(quotes: list[dict], nifty_close: float | None) -> dict | None:
+    """GIFT Nifty against NIFTY's last close: the market's own estimate of the opening gap.
+    GIFT is the near-month future, so the gap includes the futures premium (usually 0.1–0.4%)."""
+    q = next((q for q in quotes if q["key"] == "GIFT" and q.get("last")), None)
+    if not q:
+        return None
+    out = {"last": q["last"], "pct": q.get("pct"), "at": q.get("at"), "stale": q.get("stale")}
+    if nifty_close:
+        gap = q["last"] - nifty_close
+        out.update(nifty_close=nifty_close, gap=round(gap, 1), gap_pct=round(gap / nifty_close * 100, 2))
+        g = out["gap_pct"]
+        out["open"] = ("gap-up" if g >= 0.5 else "slightly higher" if g >= 0.2 else
+                       "gap-down" if g <= -0.3 else "slightly lower" if g <= -0.1 else "flat")
+        out["line"] = (f"GIFT Nifty {q['last']:,.1f} ({q['pct']:+.2f}%) → {out['open']} open, "
+                       f"{gap:+,.0f} pts vs NIFTY's {nifty_close:,.0f} close (incl. futures premium)")
+    else:
+        out["line"] = f"GIFT Nifty {q['last']:,.1f} ({q['pct']:+.2f}%)"
+    return out
+
+
+def global_cue(quotes: list[dict], nifty_close: float | None = None) -> dict:
+    """Weighted read of the latest sessions for India's next open: score −100…+100.  GIFT Nifty
+    carries the biggest weight: it is India's own overnight market."""
     num = den = 0.0
     parts = []
     for q in quotes:
@@ -168,8 +242,11 @@ def global_cue(quotes: list[dict]) -> dict:
         read, side = "Neutral", "no strong global push; let India's own chain and levels decide"
     if abs(score) >= 55:
         read = "Strongly " + read.lower()
-    return {"score": score, "read": read, "writer": side,
-            "drivers": [t for _, t in sorted(parts, reverse=True)[:5]]}
+    gift = gift_read(quotes, nifty_close)
+    drivers = [t for _, t in sorted(parts, reverse=True) if not t.startswith("GIFT Nifty")][:5]
+    if gift and not gift.get("stale"):
+        drivers.insert(0, gift["line"])
+    return {"score": score, "read": read, "writer": side, "drivers": drivers, "gift": gift}
 
 
 # ====================================================================== key levels
