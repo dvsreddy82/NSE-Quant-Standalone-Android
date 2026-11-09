@@ -18,6 +18,8 @@ from urllib.parse import parse_qs, urlparse
 import numpy as np
 import pandas as pd
 
+import chart_signals as cs
+
 import config
 
 VERSION = 1
@@ -243,7 +245,8 @@ class ApiRoutes:
                                                          "spot_after", "outcome")} for c in calls],
                         "hits": right, "graded": n,
                         "levels": [{"name": m["name"], "also": m.get("also", []), "price": m["price"],
-                                    "status": st.get(round(m["price"]))} for m in w.levels.get(und) or []]}
+                                    "status": st.get(round(m["price"]))} for m in w.levels.get(und) or []],
+                        "chart": cs.summary_lines(w.chart.get(und) or {})}
         return {**out, "alerts": [_alert_out(a) for a in w.recent_alerts(1, ("LEVEL",))],
                 "writer": [_alert_out(a) for a in w.recent_alerts(1, ("WRITER",))], "time": datetime.now()}
 

@@ -293,6 +293,7 @@ class Engine:
         if up > 20:
             self.run("chains", self._chains, every=300 if open_ else 1800)
             self.refresh_levels(every=300)
+            self.check_chart(every=300)
         if up > 30:
             self.load_risk(every=180 if open_ else 1800)
         if open_:
@@ -581,6 +582,19 @@ class Engine:
             for a in self.watch.check_levels(und, q["last"], prev if first else None):
                 self.status("📉 " + a["title"])
         self.refresh_levels()
+        self.check_chart()
+
+    def check_chart(self, every: float = 0):
+        """Chart signals (pivots, CPR, gaps, MAs, Savitzky) — alerts reach the phone via /api/alerts."""
+        def job():
+            for und in ("NIFTY", "BANKNIFTY"):
+                try:
+                    for a in self.watch.check_chart(und):
+                        self.status("📈 " + a["title"])
+                except Exception as exc:
+                    log.warning("chart signals %s failed: %s", und, exc)
+
+        self.run("chart", job, every=every)
 
     def make_calls(self, slot=None, manual: bool = False):
         slot = slot or now_ist().replace(second=0, microsecond=0, tzinfo=None)

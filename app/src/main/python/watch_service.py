@@ -18,6 +18,8 @@ import pandas as pd
 
 import config
 import market_watch as mw
+import chart_signals as cs
+from market_hours import market_open
 import writer_signals as ws
 
 log = logging.getLogger(__name__)
@@ -40,6 +42,7 @@ class WatchService:
         self._seen: set[str] = set()
         self._orange: dict[str, tuple[float, float]] = {}
         self.writer = ws.WriterWatch(svc.store)
+        self.chart: dict[str, dict] = {}            # chart_signals state per index
 
     @property
     def store(self):
@@ -174,6 +177,26 @@ class WatchService:
         if not lv:
             return []
         return self._fresh_ids(self.watcher.check(und, close, lv, prev_close))
+
+    # ---------------------------------------------------------------- chart signals (blocking)
+    def check_chart(self, und: str, refresh: bool = True) -> list[dict]:
+        """Pivots / CPR / gaps / MAs / Savitzky (chart_signals) on stored candles; new alerts only."""
+        sym = SPOT_SYMBOL[und]
+        now = pd.Timestamp(mw.now_ist())
+        if refresh and market_open():
+            last = self.store.latest_timestamp(sym, "1m")
+            if last is None or now - pd.Timestamp(last) > pd.Timedelta(minutes=3):
+                try:
+                    self.market.refresh_intraday(sym, "1m")
+                except Exception as exc:
+                    log.info("1-minute refresh for %s failed: %s", und, exc)
+        m1 = self.store.load_ohlcv(sym, "1m", start=now - pd.Timedelta(days=21))
+        m15 = self.store.load_ohlcv(sym, "15m", start=now - pd.Timedelta(days=110))
+        daily = self.svc.load_ohlcv(sym, "1D")
+        res = cs.analyse(und, m1, m15, daily, now)
+        with self._lock:
+            self.chart[und] = res["state"]
+        return self._fresh_ids(res["alerts"]) if market_open() else []
 
     def level_status(self, und: str) -> dict:
         return self.watcher.status.get(und, {})

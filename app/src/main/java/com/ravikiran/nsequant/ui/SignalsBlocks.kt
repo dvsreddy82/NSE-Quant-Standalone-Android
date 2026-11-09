@@ -63,6 +63,10 @@ fun SignalsBlock(sig: JSONObject) {
                         above?.let { "Resistance ${Fmt.int(it.d("price"))} ${it.s("name")}" + (it.s("status")?.let { s -> " ($s)" } ?: "") },
                     ).joinToString("  ·  "), color = Pal.muted, fontSize = 11.sp)
                 }
+                val chart = u.arr("chart")
+                for (i in 0 until minOf(chart.length(), 8)) {
+                    Text(chart.getString(i).removePrefix("- "), color = Pal.faint, fontSize = 10.sp)
+                }
             }
         }
         sig.arr("alerts").objects().take(3).forEach { a ->
