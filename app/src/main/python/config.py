@@ -155,6 +155,13 @@ MOVE_LOSS_LIMIT_PCT: float = _env("MOVE_LOSS_LIMIT_PCT", 3.0)      # worst P&L o
 MAX_MARGIN_USE_PCT: float = _env("MAX_MARGIN_USE_PCT", 60.0)       # keep a buffer for gap margin calls
 BOOK_DELTA_LOTS: float = _env("BOOK_DELTA_LOTS", 3.0)              # net delta per book, in index lots
 # writer signals (writer_signals.py)
+# ---- open-play alerts (gap type → direction → whole number → PDH / PDL), chart_signals.open_play
+OPEN_GAP_PCT: float = _env("OPEN_GAP_PCT", 0.25)            # open vs previous close beyond this = gap up / down
+WHOLE_STEP_NIFTY: float = _env("WHOLE_STEP_NIFTY", 100.0)   # round-number spacing (points)
+WHOLE_STEP_BANKNIFTY: float = _env("WHOLE_STEP_BANKNIFTY", 500.0)
+NEAR_LEVEL_PCT: float = _env("NEAR_LEVEL_PCT", 0.10)        # "near" a whole number / PDH / PDL
+DIRECTION_PCT: float = _env("DIRECTION_PCT", 0.10)          # 15-min move that flips "going up" / "going down"
+MAX_DIRECTION_ALERTS: int = _env("MAX_DIRECTION_ALERTS", 4)  # direction-change alerts per index per day
 PROFIT_TAKE_PCT: float = _env("PROFIT_TAKE_PCT", 50.0)             # % of the credit captured: consider booking
 PROFIT_TAKE_HIGH_PCT: float = _env("PROFIT_TAKE_HIGH_PCT", 70.0)   # … and the strong nudge
 SHORT_DELTA_WARN: float = _env("SHORT_DELTA_WARN", 0.30)           # short leg delta: plan a roll

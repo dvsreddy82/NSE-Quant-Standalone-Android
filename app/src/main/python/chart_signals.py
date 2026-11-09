@@ -271,12 +271,9 @@ def analyse(und: str, m1: pd.DataFrame, m15: pd.DataFrame, daily: pd.DataFrame,
         filled = (lo <= prev["close"]) if gap > 0 else (hi >= prev["close"]) if gap < 0 else True
         st.update(open=o, gap=gap, gap_pct=gap_pct, gap_filled=filled, open_vs_cpr=pos,
                   cpr_touched=bool(hi >= lv["BC"] and lo <= lv["TC"]))
-        if abs(gap_pct) >= GAP_ALERT_PCT and now.time() <= dtime(9, 45):     # only useful around the open
-            alert(("gap", "up" if gap > 0 else "down"), "MEDIUM",
-                  f"gap-{'up' if gap > 0 else 'down'} open {gap:+,.0f} pts ({gap_pct:+.2f}%)",
-                  f"Opened {_f(o)} vs previous close {_f(prev['close'])}, {pos} the CPR "
-                  f"{_f(lv['BC'])}–{_f(lv['TC'])} ({st['cpr_type']}, width {cpr_w:.2f}%). "
-                  f"Gap fill level: {_f(prev['close'])}.")
+        st["open_note"] = (f"Opened {_f(o)} vs previous close {_f(prev['close'])} ({gap:+,.0f} pts), {pos} the CPR "
+                           f"{_f(lv['BC'])}–{_f(lv['TC'])} ({st['cpr_type']}).")
+        if abs(gap_pct) >= GAP_ALERT_PCT:          # the open itself is announced by the open-play alert
             if filled and len(t5):
                 hit = t5[(t5["low"] <= prev["close"]) if gap > 0 else (t5["high"] >= prev["close"])]
                 if len(hit) and hit.index[0] == t5.index[-1] and fresh:     # raised on the bar that fills it
@@ -316,6 +313,9 @@ def analyse(und: str, m1: pd.DataFrame, m15: pd.DataFrame, daily: pd.DataFrame,
         if st.get("open_vs_cpr") != "inside" and touch.any() and touch.iloc[-1] and not touch.iloc[:-1].any():
             alert(("cprtouch",), "MEDIUM", f"first touch of today's CPR {_f(lv['BC'])}–{_f(lv['TC'])}",
                   f"Price reached the CPR for the first time today ({t5.index[-1]:%H:%M} bar, close {_f(p1)}).")
+
+    # ---- open play: gap type → direction → whole number → PDH / PDL
+    _open_play(und, t5, prev, now, bool(fresh), alert, st)
 
     # ---- first-hour range (9:15-10:20) and 9:30-10:00 range
     fh = today_m1[(today_m1.index.time >= dtime(9, 15)) & (today_m1.index.time < dtime(10, 20))]
@@ -468,6 +468,96 @@ def analyse(und: str, m1: pd.DataFrame, m15: pd.DataFrame, daily: pd.DataFrame,
     return {"state": st, "alerts": alerts}
 
 
+def _open_play(und: str, t5: pd.DataFrame, prev: pd.Series, now: pd.Timestamp, fresh: bool, alert, st: dict):
+    """The open-play tree: gap up / flat / gap down → going up / down → the next whole number in that
+    direction → PDH and PDL (near, breaking up, breaking down).  Direction is the last 15 minutes'
+    move (≥ DIRECTION_PCT flips it; smaller moves keep the previous direction)."""
+    if t5.empty:
+        return
+    o, pc, pdh, pdl = float(t5["open"].iloc[0]), float(prev["close"]), float(prev["high"]), float(prev["low"])
+    gap_pct = (o - pc) / pc * 100
+    kind = ("Gap-up" if gap_pct >= config.OPEN_GAP_PCT else "Gap-down" if gap_pct <= -config.OPEN_GAP_PCT
+            else "Flat (sideways)")
+    closes = t5["close"].to_numpy()
+    dirs, d, pending = [], None, None
+    for i, c in enumerate(closes):                 # a new direction must show on two bars in a row
+        ref = closes[i - 3] if i >= 3 else o
+        ch = (c - ref) / ref * 100
+        cand = "up" if ch >= config.DIRECTION_PCT else "down" if ch <= -config.DIRECTION_PCT else None
+        if d is None:
+            d = cand or ("up" if c >= o else "down")
+        elif cand and cand != d:
+            if pending == cand:
+                d, pending = cand, None
+            else:
+                pending = cand
+        else:
+            pending = None
+        dirs.append(d)
+    price = float(closes[-1])
+    step = config.WHOLE_STEP_BANKNIFTY if und == "BANKNIFTY" else config.WHOLE_STEP_NIFTY
+    major = step * (2 if und == "BANKNIFTY" else 5)
+    up_w = (np.floor(price / step) + 1) * step
+    dn_w = (np.ceil(price / step) - 1) * step
+    target = up_w if d == "up" else dn_w
+    near = config.NEAR_LEVEL_PCT
+
+    def pd_state(name, L):
+        dist = (L - price) / price * 100
+        where = "above" if L > price else "below"
+        if abs(dist) <= near:
+            return f"{name} {L:,.0f} (near, price {'above' if price > L else 'below'})"
+        return f"{name} {L:,.0f} ({abs(dist):.2f}% {where})"
+
+    path = (f"{kind} open ({gap_pct:+.2f}%) → going {d} → next whole number {target:,.0f} "
+            f"({target - price:+,.0f} pts) · {pd_state('PDH', pdh)} · {pd_state('PDL', pdl)}")
+    flips = [i for i in range(1, len(dirs)) if dirs[i] != dirs[i - 1]]
+    st["open_play"] = {"kind": kind, "gap_pct": round(gap_pct, 2), "direction": d, "whole_up": up_w,
+                       "whole_down": dn_w, "target": target, "pdh": pdh, "pdl": pdl, "path": path,
+                       "flips": len(flips)}
+    if not fresh:
+        return
+    bar = t5.index[-1]
+    if now.time() <= dtime(9, 45) and len(t5) <= 6:
+        alert(("op", "open"), "MEDIUM", f"{kind} open, going {d}", (st.get("open_note", "") + " " + path).strip())
+    if flips and flips[-1] == len(dirs) - 1 and len(flips) <= config.MAX_DIRECTION_ALERTS:
+        alert(("op", "dir", bar), "MEDIUM", f"now going {d} ({kind.lower()} day)",
+              f"15-min move turned {'up' if d == 'up' else 'down'} at {price:,.1f}. " + path)
+    if len(closes) < 2:
+        return
+    p0, p1 = float(closes[-2]), float(price)
+    buf = BREAK_BUFFER
+    lo_, hi_ = min(p0, p1), max(p0, p1)
+    for W in np.arange(np.ceil(lo_ / step) * step, hi_ + step / 2, step):
+        if W <= lo_ or W >= hi_:
+            continue
+        up = p1 > W * (1 + buf) and p0 <= W
+        dn = p1 < W * (1 - buf) and p0 >= W
+        if up or dn:
+            nxt = W + step if up else W - step
+            alert(("op", "wn", round(W), "up" if up else "down"), "HIGH" if W % major == 0 else "MEDIUM",
+                  f"5-min close {'above' if up else 'below'} whole number {W:,.0f}",
+                  f"Close {p1:,.1f} (prev {p0:,.1f}); next whole number {nxt:,.0f}. " + path)
+    dist_t = abs(target - p1) / p1 * 100
+    if target % major == 0 and dist_t <= near and abs(target - p0) / p0 * 100 > near:   # majors only: crosses cover the rest
+        alert(("op", "wnnear", round(target), d), "MEDIUM", f"near whole number {target:,.0f} (going {d})",
+              f"{abs(target - p1):,.0f} pts away at {p1:,.1f}. " + path)
+    for name, L in (("PDH", pdh), ("PDL", pdl)):
+        if p0 <= L and p1 > L * (1 + buf):
+            alert(("op", "brk", name, "up"), "HIGH", f"breaking above {name} {L:,.0f} ({kind.lower()} day)",
+                  f"5-min close {p1:,.1f} above {'the previous-day high' if name == 'PDH' else 'the previous-day low'}"
+                  f" {L:,.0f}. " + path)
+        elif p0 >= L and p1 < L * (1 - buf):
+            alert(("op", "brk", name, "down"), "HIGH", f"breaking below {name} {L:,.0f} ({kind.lower()} day)",
+                  f"5-min close {p1:,.1f} below {'the previous-day high' if name == 'PDH' else 'the previous-day low'}"
+                  f" {L:,.0f}. " + path)
+        elif (abs(L - p1) / p1 * 100 <= near and abs(L - p0) / p0 * 100 > near
+              and ((closes > L).all() or (closes < L).all())):      # only before the level has been crossed today
+            alert(("op", "near", name, "above" if L > p1 else "below"), "MEDIUM",
+                  f"near {name} {L:,.0f} ({'from below' if L > p1 else 'from above'}, going {d})",
+                  f"{abs(L - p1):,.0f} pts away at {p1:,.1f}. " + path)
+
+
 def _next_levels(marks, price) -> str:
     above = sorted((m for m in marks if m[1] > price), key=lambda m: m[1])
     below = sorted((m for m in marks if m[1] < price), key=lambda m: -m[1])
@@ -494,6 +584,8 @@ def summary_lines(st: dict) -> list[str]:
     if st.get("gap") is not None:
         out.append(f"- Opening gap {st['gap']:+,.0f} pts ({st['gap_pct']:+.2f}%), "
                    + ("filled" if st["gap_filled"] else "not filled yet"))
+    if st.get("open_play"):
+        out.append("- Open play: " + st["open_play"]["path"])
     if st.get("first_hour"):
         out.append(f"- First hour (9:15–10:20) {st['first_hour']['low']:,.0f}–{st['first_hour']['high']:,.0f}")
     if st.get("hourly_cpr"):

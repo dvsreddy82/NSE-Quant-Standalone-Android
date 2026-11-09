@@ -335,6 +335,8 @@ class LevelWatcher:
             if key in fired:
                 continue
             fired.add(key)
+            if m["name"] in ("Previous-day high", "Previous-day low") and not m.get("also"):
+                continue                       # announced by the open-play alerts (chart_signals), status kept
             fired.discard((m["name"], round(L), "up" if down else "down"))     # re-arm the other way
             below = [x for x in levels if x["price"] < close - buf and x is not m]
             above = [x for x in levels if x["price"] > close + buf and x is not m]
