@@ -92,7 +92,10 @@ def _gift(g) -> dict:
     m = re.search(r"Last Trade on (\d{1,2} \w{3}) (\d{1,2}:\d{2} [AP]M)", h)
     at = None
     if m:
-        t = pd.Timestamp(f"{m.group(1)} {year} {m.group(2)}", tz=config.IST)
+        hm = m.group(2)
+        if int(hm.split(":")[0]) > 12:                    # the site sometimes shows 24-hour time with PM ("15:16 PM")
+            hm = hm[:-3]
+        t = pd.Timestamp(f"{m.group(1)} {year} {hm}", tz=config.IST)
         if t > pd.Timestamp.now(tz=config.IST) + pd.Timedelta(days=2):      # "As on" in January, trade in December
             t = t - pd.DateOffset(years=1)
         at = t.to_pydatetime()

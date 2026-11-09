@@ -418,6 +418,8 @@ def analyse(und: str, m1: pd.DataFrame, m15: pd.DataFrame, daily: pd.DataFrame,
         s, l_ = _ema(hl2(b), 34), _ema(hl2(b), 50)
         cur, old = ma_status(s.iloc[-1], l_.iloc[-1]), ma_status(s.iloc[-2], l_.iloc[-2])
         ma_rows.append({"tf": tf, "status": cur, "short": float(s.iloc[-1]), "long": float(l_.iloc[-1]),
+                        "gap_pct": float((s.iloc[-1] - l_.iloc[-1]) / l_.iloc[-1] * 100), "cross": _last_cross(s, l_),
+                        "bar": b.index[-1],
                         "rising": bool(l_.iloc[-1] >= l_.iloc[-2])})
         recent = mins == 0 or (now - b["end"].iloc[-1]) <= pd.Timedelta(minutes=max(FRESH_MIN, mins))
         if tf in ALERT_MA_TFS and recent and cur != old and cur in ("BULLISH", "BEARISH") and old != "N/A":
@@ -433,7 +435,9 @@ def analyse(und: str, m1: pd.DataFrame, m15: pd.DataFrame, daily: pd.DataFrame,
         f_, s_ = _ema(b["close"], 10), _ema(b["close"], 20)
         cur = "BULLISH" if f_.iloc[-1] > s_.iloc[-1] else "BEARISH"
         old = "BULLISH" if f_.iloc[-2] > s_.iloc[-2] else "BEARISH"
-        ema_rows.append({"tf": tf, "status": cur, "fast": float(f_.iloc[-1]), "slow": float(s_.iloc[-1])})
+        ema_rows.append({"tf": tf, "status": cur, "fast": float(f_.iloc[-1]), "slow": float(s_.iloc[-1]),
+                         "gap_pct": float((f_.iloc[-1] - s_.iloc[-1]) / s_.iloc[-1] * 100),
+                         "cross": _last_cross(f_, s_), "bar": b.index[-1]})
         recent = mins == 0 or (now - b["end"].iloc[-1]) <= pd.Timedelta(minutes=max(FRESH_MIN, mins))
         if tf in ALERT_EMA_TFS and recent and cur != old:
             alert(("ema", tf, cur, b.index[-1]), "HIGH" if tf in ("180m", "D") else "MEDIUM",
@@ -556,6 +560,13 @@ def _open_play(und: str, t5: pd.DataFrame, prev: pd.Series, now: pd.Timestamp, f
             alert(("op", "near", name, "above" if L > p1 else "below"), "MEDIUM",
                   f"near {name} {L:,.0f} ({'from below' if L > p1 else 'from above'}, going {d})",
                   f"{abs(L - p1):,.0f} pts away at {p1:,.1f}. " + path)
+
+
+def _last_cross(a: pd.Series, b: pd.Series):
+    """Bar start of the most recent cross of a over / under b (None if none in the data)."""
+    sign = np.sign((a - b).dropna())
+    ch = sign[sign != sign.shift()].index
+    return ch[-1] if len(ch) > 1 else None
 
 
 def _next_levels(marks, price) -> str:

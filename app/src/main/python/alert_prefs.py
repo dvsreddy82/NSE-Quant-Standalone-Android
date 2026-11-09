@@ -38,6 +38,8 @@ CATALOG: list[tuple[str, str, str, str]] = [
     ("breadth", "Market", "BANKNIFTY breadth", "Heavyweights against the index, narrow breadth"),
     ("setup", "Market", "Evening FII/DII setup", "Squeeze-loading setup after the close"),
     ("volume", "Market", "Daily unusual-volume summary", "NIFTY 50 / BANKNIFTY stocks, after the close"),
+    ("summary_am", "Market", "8 AM market summary", "Last close, PCR, levels for today, overnight global, GIFT gap, your book"),
+    ("summary_pm", "Market", "9 PM market summary", "Today's close, PCR, levels for tomorrow, flows, global, your book"),
 ]
 KEYS = [c[0] for c in CATALOG]
 
@@ -59,6 +61,8 @@ def category(a: dict) -> str | None:
     if a.get("cat"):
         return a["cat"]
     kind = a.get("kind") or a.get("level")
+    if kind == "SUMMARY":
+        return "summary_am" if a.get("slot") == "morning" else "summary_pm"
     if kind == "WRITER" or a.get("source") == "Writer signals":
         return WRITER.get(a.get("signal"), "w_position")
     if kind == "LEVEL":

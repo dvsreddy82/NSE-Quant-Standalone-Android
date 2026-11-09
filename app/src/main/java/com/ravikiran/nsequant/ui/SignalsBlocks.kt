@@ -63,6 +63,7 @@ fun SignalsBlock(sig: JSONObject) {
                         above?.let { "Resistance ${Fmt.int(it.d("price"))} ${it.s("name")}" + (it.s("status")?.let { s -> " ($s)" } ?: "") },
                     ).joinToString("  ·  "), color = Pal.muted, fontSize = 11.sp)
                 }
+                u.optJSONObject("ema")?.let { EmaTable(it) }
                 val chart = u.arr("chart")
                 for (i in 0 until minOf(chart.length(), 8)) {
                     Text(chart.getString(i).removePrefix("- "), color = Pal.faint, fontSize = 10.sp)
@@ -71,6 +72,22 @@ fun SignalsBlock(sig: JSONObject) {
         }
         sig.arr("alerts").objects().take(3).forEach { a ->
             AlertCard(if (a.s("level") == "HIGH") "RED" else "AMBER", a.s("title") ?: "", listOf(a.s("text") ?: ""))
+        }
+        val sum = sig.arr("summary")
+        if (sum.length() > 1) {
+            Text("🗒 ${sum.getString(0)}", color = Pal.muted, fontSize = 12.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+            var section = ""
+            for (i in 1 until sum.length()) {
+                val line = sum.getString(i)
+                val sec = line.substringBefore(": ")
+                if (sec != section) {
+                    section = sec
+                    Text(sec, color = Pal.text, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 4.dp))
+                }
+                Text("• " + line.substringAfter(": "), color = Pal.muted, fontSize = 11.sp)
+            }
         }
         val vol = sig.arr("volume")
         if (vol.length() > 1) {
@@ -120,6 +137,28 @@ fun GlobalBlock(g: JSONObject) {
                 Text(if (bps) Fmt.signed(q.d("move"), 0) + " bps" else Fmt.pct(q.d("pct")),
                     color = Pal.chg(q.d("chg")), fontSize = 12.sp,
                     fontWeight = if (big) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.width(72.dp))
+            }
+        }
+    }
+}
+
+
+/** EMA 34×50 (hl2) and EMA 10×20 (close) values per timeframe, from the chart-signals engine. */
+@Composable
+private fun EmaTable(e: JSONObject) {
+    listOf(Triple("ma", "EMA 34 × 50", "short" to "long"), Triple("ema", "EMA 10 × 20", "fast" to "slow")).forEach { (k, title, keys) ->
+        val rows = e.arr(k).objects()
+        if (rows.isEmpty()) return@forEach
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+        rows.forEach { r ->
+            val st = r.s("status") ?: "N/A"
+            Row(Modifier.fillMaxWidth()) {
+                Text(r.s("tf") ?: "", Modifier.weight(0.6f), fontSize = 10.sp)
+                Text(Fmt.px1(r.d(keys.first)), Modifier.weight(1f), fontSize = 10.sp)
+                Text(Fmt.px1(r.d(keys.second)), Modifier.weight(1f), fontSize = 10.sp)
+                Text(r.d("gap_pct")?.let { String.format("%+.2f%%", it) } ?: "—", Modifier.weight(0.8f), fontSize = 10.sp)
+                Text(st, Modifier.weight(1.1f), fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                    color = if (st == "BULLISH") Pal.up else if (st == "BEARISH") Pal.down else if (st == "NEAR CROSS") Pal.warn else Pal.faint)
             }
         }
     }

@@ -51,6 +51,8 @@ from sqlite_store import SqliteStore
 from trades_service import TradesService
 import volume_watch
 from volume_watch import VolumeWatch
+import market_summary
+from market_summary import MarketSummary
 from watch_service import WatchService
 
 log = logging.getLogger("engine")
@@ -208,6 +210,7 @@ class Engine:
         self.news_svc = NewsService(self.svc)
         self.watch = WatchService(self.svc, self.options, self.market)
         self.volume = VolumeWatch(self.svc, self.broker, self.market)
+        self.summary = MarketSummary(self.svc.store)
         self.sync_svc = SyncLog(self.svc.store)
         # the attributes api_routes reads (named as on the desktop window)
         self.risk_view = SimpleNamespace(results={})
@@ -301,6 +304,10 @@ class Engine:
             self.load_risk(every=180 if open_ else 1800)
         if up > 40 and t.minute % 5 == 0 and self.volume.due(t):
             self.build_volume()
+        if up > 45:
+            slot = self.summary.due(t)
+            if slot:
+                self.build_summary(slot)
         if open_:
             self.load_banknifty(every=300)
             if self.broker.live:
@@ -600,6 +607,16 @@ class Engine:
                     self.status("📊 " + a["title"])
 
         self.run("volume", job, every=600)
+
+    def build_summary(self, slot: str):
+        """8 am and 9 pm on trading days: the market summary (one notification each)."""
+        def job():
+            s = self.summary.run(self.routes, slot)
+            if s["session"]:
+                for a in self.watch._fresh_ids([market_summary.alert(s)]):
+                    self.status(("☀️ " if slot == "morning" else "🌙 ") + a["title"])
+
+        self.run("summary", job, every=60)
 
     def check_chart(self, every: float = 0):
         """Chart signals (pivots, CPR, gaps, MAs, Savitzky) — alerts reach the phone via /api/alerts."""

@@ -20,6 +20,7 @@ import pandas as pd
 
 import chart_signals as cs
 import volume_watch
+import market_summary
 import alert_prefs
 
 import config
@@ -267,9 +268,14 @@ class ApiRoutes:
                         "hits": right, "graded": n,
                         "levels": [{"name": m["name"], "also": m.get("also", []), "price": m["price"],
                                     "status": st.get(round(m["price"]))} for m in w.levels.get(und) or []],
-                        "chart": cs.summary_lines(w.chart.get(und) or {})}
+                        "chart": cs.summary_lines(w.chart.get(und) or {}),
+                        "ema": {k: [{x: r.get(x) for x in ("tf", "status", "short", "long", "fast", "slow", "gap_pct",
+                                                            "cross")} for r in (w.chart.get(und) or {}).get(k, [])]
+                                for k in ("ma", "ema")}}
         vol = getattr(self.win, "volume", None)
         out["volume"] = volume_watch.summary_lines(vol.latest() if vol else None, 5)
+        ms = getattr(self.win, "summary", None)
+        out["summary"] = market_summary.lines(ms.latest() if ms else None)
         return {**out, "alerts": [_alert_out(a) for a in w.recent_alerts(1, ("LEVEL",))],
                 "writer": [_alert_out(a) for a in w.recent_alerts(1, ("WRITER",))], "time": datetime.now()}
 
@@ -324,6 +330,12 @@ class ApiRoutes:
             if age < 18 * 3600:
                 items.append({"id": a["id"], "level": "VOLUME", "source": "Volume summary", "title": a["title"],
                               "text": a["text"]})
+        for a in w.recent_alerts(2, ("SUMMARY",)):          # the 8 AM / 9 PM summaries
+            ts = pd.Timestamp(a["raised_at"])
+            age = (pd.Timestamp.now(tz="UTC") - (ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC"))).total_seconds()
+            if age < 14 * 3600:
+                items.append({"id": a["id"], "level": "SUMMARY", "source": "Market summary", "title": a["title"],
+                              "text": a["text"], "cat": alert_prefs.category(a)})
         for a in w.recent_alerts(1, ("GLOBAL", "LEVEL")):
             ts = pd.Timestamp(a["raised_at"])
             age = (pd.Timestamp.now(tz="UTC") - (ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC"))).total_seconds()
@@ -343,7 +355,7 @@ class ApiRoutes:
         now = datetime.now().astimezone()
         news_at = {_id("news", d["id"]): d.get("alerted_at") or d.get("published")
                    for d in self.win.news_svc.recent(hours=6, impact="HIGH", limit=40) if d.get("alerted")}
-        raised = {a["id"]: a.get("raised_at") for a in w.recent_alerts(2, ("GLOBAL", "LEVEL", "WRITER", "VOLUME"))}
+        raised = {a["id"]: a.get("raised_at") for a in w.recent_alerts(2, ("GLOBAL", "LEVEL", "WRITER", "VOLUME", "SUMMARY"))}
         for it in items:
             t = raised.get(it["id"]) or news_at.get(it["id"])
             if it["level"] == "DIRECTION":
