@@ -69,7 +69,8 @@ class ApiRoutes:
         self.table = {"/api/health": self.health, "/api/ticker": self.ticker, "/api/overview": self.overview,
                       "/api/banknifty": self.banknifty, "/api/chain": self.chain, "/api/risk": self.risk,
                       "/api/fii": self.fii, "/api/positions": self.positions, "/api/alerts": self.alerts,
-                      "/api/news": self.news, "/api/global": self.global_markets, "/api/signals": self.signals}
+                      "/api/news": self.news, "/api/global": self.global_markets, "/api/signals": self.signals,
+                      "/api/brief": self.brief}
 
     def get(self, path: str):
         """'/api/chain?und=NIFTY' → JSON-safe dict. Raises KeyError for an unknown endpoint."""
@@ -245,6 +246,11 @@ class ApiRoutes:
                                     "status": st.get(round(m["price"]))} for m in w.levels.get(und) or []]}
         return {**out, "alerts": [_alert_out(a) for a in w.recent_alerts(1, ("LEVEL",))],
                 "writer": [_alert_out(a) for a in w.recent_alerts(1, ("WRITER",))], "time": datetime.now()}
+
+    def brief(self, q):
+        """Plain-text snapshot to paste into Gemini; positions and P&L only with ?positions=1."""
+        import gemini_export
+        return gemini_export.build(self, positions=q.get("positions") in ("1", "true", "yes"))
 
     def alerts(self, _q):
         """Every active alert with a stable id; the phone raises a notification for unseen ids."""

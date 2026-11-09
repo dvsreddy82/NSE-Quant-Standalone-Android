@@ -28,6 +28,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -49,6 +50,7 @@ import com.ravikiran.nsequant.ui.AppTheme
 import com.ravikiran.nsequant.ui.BankNiftyScreen
 import com.ravikiran.nsequant.ui.ChainScreen
 import com.ravikiran.nsequant.ui.FiiScreen
+import com.ravikiran.nsequant.ui.GeminiExportDialog
 import com.ravikiran.nsequant.ui.GlobalScreen
 import com.ravikiran.nsequant.ui.HomeScreen
 import com.ravikiran.nsequant.ui.Pal
@@ -90,6 +92,7 @@ private fun App(startTab: MutableState<String>) {
     LaunchedEffect(startTab.value) { tab = startTab.value }
     var settings by rememberSaveable { mutableStateOf(false) }
     var monitor by rememberSaveable { mutableStateOf(Prefs.monitorOn(ctx)) }
+    var gemini by rememberSaveable { mutableStateOf(false) }
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) { MonitorService.start(ctx); Prefs.setMonitor(ctx, true); monitor = true }
     }
@@ -111,7 +114,10 @@ private fun App(startTab: MutableState<String>) {
             TopAppBar(
                 title = { Text(if (settings) "Settings" else "NSE Quant Pro", fontWeight = FontWeight.Bold, fontSize = 18.sp,
                     color = Pal.accent) },
-                actions = { IconButton(onClick = { settings = !settings }) { Icon(Icons.Filled.Settings, "Settings") } },
+                actions = {
+                    if (!settings) TextButton(onClick = { gemini = true }) { Text("✦ Gemini", color = Pal.accent) }
+                    IconButton(onClick = { settings = !settings }) { Icon(Icons.Filled.Settings, "Settings") }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Pal.panel2),
             )
         },
@@ -125,6 +131,7 @@ private fun App(startTab: MutableState<String>) {
             }
         },
     ) { pad ->
+        if (gemini) GeminiExportDialog(onDismiss = { gemini = false })
         Box(Modifier.fillMaxSize().padding(pad)) {
             if (settings) {
                 SettingsScreen(onDone = { settings = false })
