@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 import chart_signals as cs
+import volume_watch
 
 import config
 
@@ -247,6 +248,8 @@ class ApiRoutes:
                         "levels": [{"name": m["name"], "also": m.get("also", []), "price": m["price"],
                                     "status": st.get(round(m["price"]))} for m in w.levels.get(und) or []],
                         "chart": cs.summary_lines(w.chart.get(und) or {})}
+        vol = getattr(self.win, "volume", None)
+        out["volume"] = volume_watch.summary_lines(vol.latest() if vol else None, 5)
         return {**out, "alerts": [_alert_out(a) for a in w.recent_alerts(1, ("LEVEL",))],
                 "writer": [_alert_out(a) for a in w.recent_alerts(1, ("WRITER",))], "time": datetime.now()}
 
@@ -294,6 +297,12 @@ class ApiRoutes:
         for a in w.recent_alerts(1, ("WRITER",)):
             items.append({"id": a["id"], "level": "WRITER", "source": "Writer signals", "title": a["title"],
                           "text": a["text"], "severity": a.get("level"), "signal": a.get("signal")})
+        for a in w.recent_alerts(2, ("VOLUME",)):           # the after-close summary: until the next morning
+            ts = pd.Timestamp(a["raised_at"])
+            age = (pd.Timestamp.now(tz="UTC") - (ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC"))).total_seconds()
+            if age < 18 * 3600:
+                items.append({"id": a["id"], "level": "VOLUME", "source": "Volume summary", "title": a["title"],
+                              "text": a["text"]})
         for a in w.recent_alerts(1, ("GLOBAL", "LEVEL")):
             ts = pd.Timestamp(a["raised_at"])
             age = (pd.Timestamp.now(tz="UTC") - (ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC"))).total_seconds()
@@ -310,7 +319,7 @@ class ApiRoutes:
         now = datetime.now().astimezone()
         news_at = {_id("news", d["id"]): d.get("alerted_at") or d.get("published")
                    for d in self.win.news_svc.recent(hours=6, impact="HIGH", limit=40) if d.get("alerted")}
-        raised = {a["id"]: a.get("raised_at") for a in w.recent_alerts(1, ("GLOBAL", "LEVEL", "WRITER"))}
+        raised = {a["id"]: a.get("raised_at") for a in w.recent_alerts(2, ("GLOBAL", "LEVEL", "WRITER", "VOLUME"))}
         for it in items:
             t = raised.get(it["id"]) or news_at.get(it["id"])
             if it["level"] == "DIRECTION":

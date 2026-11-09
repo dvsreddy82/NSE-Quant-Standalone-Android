@@ -34,7 +34,10 @@ class Ticker:
             p1 = int(pd.Timestamp(start).timestamp())
         else:
             p1 = now - _seconds(period or "1mo")
-        p2 = int(pd.Timestamp(end).timestamp()) if end is not None else now + 86400
+        intraday = interval[-1] in ("m", "h") and interval != "1mo"
+        p2 = int(pd.Timestamp(end).timestamp()) if end is not None else (now if intraday else now + 86400)
+        if intraday and period and start is None:      # Yahoo rejects intraday spans past its window (422)
+            p1 = max(p1, p2 - _seconds(period) + 3600)
         params = {"period1": p1, "period2": p2, "interval": {"60m": "1h"}.get(interval, interval),
                   "includePrePost": "false", "events": "div,split"}
         r = None

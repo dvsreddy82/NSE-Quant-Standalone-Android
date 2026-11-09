@@ -49,6 +49,8 @@ from shoonya_feed import (INDEX_TOKENS, REDIRECT_URL, VIX_TOKEN, OAuthCatcher, S
                           load_settings, save_settings, totp_now)
 from sqlite_store import SqliteStore
 from trades_service import TradesService
+import volume_watch
+from volume_watch import VolumeWatch
 from watch_service import WatchService
 
 log = logging.getLogger("engine")
@@ -205,6 +207,7 @@ class Engine:
         self.bnf_svc = BankNiftyService(self.svc, self.broker, self.market)
         self.news_svc = NewsService(self.svc)
         self.watch = WatchService(self.svc, self.options, self.market)
+        self.volume = VolumeWatch(self.svc, self.broker, self.market)
         self.sync_svc = SyncLog(self.svc.store)
         # the attributes api_routes reads (named as on the desktop window)
         self.risk_view = SimpleNamespace(results={})
@@ -296,6 +299,8 @@ class Engine:
             self.check_chart(every=300)
         if up > 30:
             self.load_risk(every=180 if open_ else 1800)
+        if up > 40 and t.minute % 5 == 0 and self.volume.due(t):
+            self.build_volume()
         if open_:
             self.load_banknifty(every=300)
             if self.broker.live:
@@ -583,6 +588,18 @@ class Engine:
                 self.status("📉 " + a["title"])
         self.refresh_levels()
         self.check_chart()
+
+    def build_volume(self):
+        """After 3:35 pm on trading days: the unusual-volume summary for NIFTY 50 / BANKNIFTY stocks."""
+        today = now_ist().date()
+
+        def job():
+            out = self.volume.build(day=today)
+            if out["checked"]:
+                for a in self.watch._fresh_ids([volume_watch.alert(out)]):
+                    self.status("📊 " + a["title"])
+
+        self.run("volume", job, every=600)
 
     def check_chart(self, every: float = 0):
         """Chart signals (pivots, CPR, gaps, MAs, Savitzky) — alerts reach the phone via /api/alerts."""

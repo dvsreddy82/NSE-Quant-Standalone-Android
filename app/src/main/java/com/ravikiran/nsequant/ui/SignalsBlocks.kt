@@ -72,6 +72,17 @@ fun SignalsBlock(sig: JSONObject) {
         sig.arr("alerts").objects().take(3).forEach { a ->
             AlertCard(if (a.s("level") == "HIGH") "RED" else "AMBER", a.s("title") ?: "", listOf(a.s("text") ?: ""))
         }
+        val vol = sig.arr("volume")
+        if (vol.length() > 1) {
+            Text("📊 Unusual volume · ${vol.getString(0)}", color = Pal.muted, fontSize = 12.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+            for (i in 1 until minOf(vol.length(), 14)) {
+                val line = vol.getString(i)
+                val head = !line.startsWith("  ")
+                Text(line.trim(), color = if (head) Pal.text else Pal.muted, fontSize = if (head) 12.sp else 11.sp,
+                    fontWeight = if (head) FontWeight.Bold else FontWeight.Normal)
+            }
+        }
         val wr = sig.arr("writer").objects()
         if (wr.isNotEmpty()) {
             Text("Writer signals today (${wr.size}) · newest first", color = Pal.muted, fontSize = 12.sp,

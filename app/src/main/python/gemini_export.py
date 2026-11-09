@@ -184,6 +184,12 @@ def _chart(r) -> list[str]:
     return out
 
 
+def _volume(r) -> list[str]:
+    import volume_watch
+    vol = getattr(r.win, "volume", None)
+    return ["- " + ln.strip() for ln in volume_watch.summary_lines(vol.latest() if vol else None, 6)]
+
+
 def _fii(r) -> list[str]:
     x = r.win.fii_view.res or {}
     if not x.get("available"):
@@ -253,6 +259,7 @@ def _book(r) -> list[str]:
 SECTIONS = [("Indices", _indices), ("GIFT Nifty and global markets", _global), ("Option chains", _chains),
             ("Writer risk monitor", _risk), ("Direction calls and key levels", _calls),
             ("Chart levels: pivots, CPR, gaps, moving averages", _chart),
+            ("Unusual volume in NIFTY 50 / BANKNIFTY stocks (latest session)", _volume),
             ("FII / DII positioning", _fii), ("BANKNIFTY breadth", _breadth),
             ("Today's alerts and high-impact news", _alerts)]
 

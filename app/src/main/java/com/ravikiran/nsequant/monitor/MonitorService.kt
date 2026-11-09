@@ -186,7 +186,7 @@ class MonitorService : Service() {
     }
 
     private fun tag(level: String?) = when (level) {
-        "RED" -> "🔴"; "AMBER" -> "🟠"; "SETUP" -> "⚑"; "NEWS" -> "📰"; "GLOBAL" -> "🌐"; "LEVEL" -> "📉"; "WRITER" -> "✍"; else -> "•"
+        "RED" -> "🔴"; "AMBER" -> "🟠"; "SETUP" -> "⚑"; "NEWS" -> "📰"; "GLOBAL" -> "🌐"; "LEVEL" -> "📉"; "WRITER" -> "✍"; "VOLUME" -> "📊"; else -> "•"
     }
 
     private fun openLink(url: String, id: String): PendingIntent = PendingIntent.getActivity(this, id.hashCode(),
