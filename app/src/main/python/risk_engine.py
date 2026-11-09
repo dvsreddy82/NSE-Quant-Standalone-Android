@@ -50,7 +50,9 @@ def compact(res: dict, ts: float | None = None) -> dict:
     """A small copy of a chain analysis, kept in memory to measure intraday change."""
     return {"ts": ts or time.time(), "spot": res["spot"], "straddle": res.get("straddle"),
             "expiry": res["expiry"],
-            "rows": {r["strike"]: {k: r.get(k) for k in ("ce_oi", "pe_oi", "ce_iv", "pe_iv", "ce_ltp", "pe_ltp")}
+            "rows": res.get("strikes_all") or
+                    {r["strike"]: {k: r.get(k) for k in ("ce_oi", "pe_oi", "ce_iv", "pe_iv", "ce_ltp", "pe_ltp",
+                                                         "ce_vol", "pe_vol")}
                      for r in res.get("chain") or []}}
 
 
@@ -69,7 +71,8 @@ def compact_from_js(js: dict, expiry: str, ts: float) -> dict | None:
         rows[float(r.strike)] = {"ce_oi": float(r.ce_oi), "pe_oi": float(r.pe_oi),
                                  "ce_iv": float(r.ce_iv) * 100 if r.ce_iv and not pd.isna(r.ce_iv) else None,
                                  "pe_iv": float(r.pe_iv) * 100 if r.pe_iv and not pd.isna(r.pe_iv) else None,
-                                 "ce_ltp": float(r.ce_ltp), "pe_ltp": float(r.pe_ltp)}
+                                 "ce_ltp": float(r.ce_ltp), "pe_ltp": float(r.pe_ltp),
+                                 "ce_vol": float(r.ce_vol), "pe_vol": float(r.pe_vol)}
     return {"ts": ts, "spot": S, "straddle": float(atm.ce_ltp + atm.pe_ltp), "expiry": expiry, "rows": rows}
 
 

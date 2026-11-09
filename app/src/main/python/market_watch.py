@@ -391,25 +391,40 @@ def direction_call(res: dict, prev: dict | None, levels: list[dict] | None = Non
         s = 2 if mv >= 0.35 else 1 if mv >= 0.12 else -2 if mv <= -0.35 else -1 if mv <= -0.12 else 0
         sig.append((s, f"Spot {mv:+.2f}% in {mins:.0f} min ({prev['spot']:,.1f} → {S:,.1f})"))
         prow = prev.get("rows") or {}
-        dpe = sum((rows[k].get("pe_oi") or 0) - ((prow.get(k) or {}).get("pe_oi") or 0) for k in near if k in prow)
-        dce = sum((rows[k].get("ce_oi") or 0) - ((prow.get(k) or {}).get("ce_oi") or 0) for k in near if k in prow)
+        # OI change *with* premium change over the window, per near-ATM strike: OI up + premium down = possible
+        # writing, OI up + premium up = possible buying (not confirmed identities).  Put writing / call buying
+        # lean bullish, call writing / put buying lean bearish.  This is the one positioning score; the PCR
+        # below is shown for context only, because it moves with the same OI and would count it twice.
+        fl = {"pe_w": 0.0, "pe_b": 0.0, "ce_w": 0.0, "ce_b": 0.0}
         base = sum((rows[k].get("pe_oi") or 0) + (rows[k].get("ce_oi") or 0) for k in near) or 1
-        tot = abs(dpe) + abs(dce)
-        if tot / base >= 0.004:
-            r = (dpe - dce) / tot
+        added = 0.0
+        for k in near:
+            if k not in prow:
+                continue
+            for side in ("pe", "ce"):
+                d_oi = (rows[k].get(f"{side}_oi") or 0) - ((prow.get(k) or {}).get(f"{side}_oi") or 0)
+                d_px = (rows[k].get(f"{side}_ltp") or 0) - ((prow.get(k) or {}).get(f"{side}_ltp") or 0)
+                if d_oi > 0:
+                    added += d_oi
+                    if d_px < 0:
+                        fl[f"{side}_w"] += d_oi
+                    elif d_px > 0:
+                        fl[f"{side}_b"] += d_oi
+        if added / base >= 0.004:
+            r = ((fl["pe_w"] + fl["ce_b"]) - (fl["ce_w"] + fl["pe_b"])) / added
             s = 2 if r >= 0.5 else 1 if r >= 0.2 else -2 if r <= -0.5 else -1 if r <= -0.2 else 0
-            what = ("put writing outpaced call writing" if r > 0.2 else "call writing outpaced put writing"
-                    if r < -0.2 else "puts and calls added about evenly")
-            sig.append((s, f"Near-ATM OI change: puts {_lakh(dpe)}, calls {_lakh(dce)} — {what}"))
+            what = ("put writing / call buying dominated (bullish lean)" if r >= 0.2 else
+                    "call writing / put buying dominated (bearish lean)" if r <= -0.2 else "mixed — no clear lean")
+            sig.append((s, f"Near-ATM OI added with premium: put writing {_lakh(fl['pe_w'])}, put buying "
+                           f"{_lakh(fl['pe_b'])}, call writing {_lakh(fl['ce_w'])}, call buying {_lakh(fl['ce_b'])}"
+                           f" — {what}"))
         else:
             sig.append((0, "Near-ATM OI barely changed — no fresh positioning"))
         pk = lambda rr, key: sum((rr.get(k) or {}).get(key) or 0 for k in near)
         pcr_now = pk(rows, "pe_oi") / (pk(rows, "ce_oi") or 1)
         pcr_then = pk(prow, "pe_oi") / (pk(prow, "ce_oi") or 1) if prow else None
         if pcr_then:
-            d = pcr_now - pcr_then
-            s = 1 if d >= 0.05 else -1 if d <= -0.05 else 0
-            sig.append((s, f"Near-ATM PCR {pcr_then:.2f} → {pcr_now:.2f}"))
+            sig.append((0, f"Near-ATM PCR {pcr_then:.2f} → {pcr_now:.2f} (context; scored through the OI flow above)"))
         atm = min(rows, key=lambda k: abs(k - S)) if rows else None
         iv_now = _avg((rows.get(atm) or {}).get("ce_iv"), (rows.get(atm) or {}).get("pe_iv")) if atm else None
         iv_then = _avg((prow.get(atm) or {}).get("ce_iv"), (prow.get(atm) or {}).get("pe_iv")) if atm and prow else None
@@ -433,8 +448,8 @@ def direction_call(res: dict, prev: dict | None, levels: list[dict] | None = Non
         sig.append((0, "No chain from ~15 min ago yet — this call uses levels and positioning only"))
 
     pcr = res.get("pcr")
-    if pcr is not None:
-        sig.append((1 if pcr >= 1.25 else -1 if pcr <= 0.75 else 0, f"Total PCR (OI) {pcr:.2f}"))
+    if pcr is not None:            # a PCR level alone is not bullish or bearish: context, not scored
+        sig.append((0, f"Total PCR (OI) {pcr:.2f} (context only)"))
     trend = (res.get("trend") or "").lower()
     if "bull" in trend or "bear" in trend:
         sig.append((1 if "bull" in trend else -1, f"Daily trend: {res.get('trend')}"))

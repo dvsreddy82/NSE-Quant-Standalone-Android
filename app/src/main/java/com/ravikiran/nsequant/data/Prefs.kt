@@ -8,6 +8,15 @@ object Prefs {
 
     private fun sp(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
+    /** Alert categories switched off for notifications on this phone (keys from /api/alerts "categories"). */
+    fun alertsOff(ctx: Context): Set<String> = sp(ctx).getStringSet("alerts_off", emptySet())?.toSet() ?: emptySet()
+    fun setAlertOn(ctx: Context, cat: String, on: Boolean) {
+        val cur = alertsOff(ctx).toMutableSet()
+        if (on) cur.remove(cat) else cur.add(cat)
+        sp(ctx).edit().putStringSet("alerts_off", cur).apply()
+    }
+    fun setAlertsOff(ctx: Context, cats: Set<String>) = sp(ctx).edit().putStringSet("alerts_off", cats).apply()
+
     fun monitorOn(ctx: Context) = sp(ctx).getBoolean("monitor", false)
     fun setMonitor(ctx: Context, on: Boolean) = sp(ctx).edit().putBoolean("monitor", on).apply()
 

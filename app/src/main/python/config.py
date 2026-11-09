@@ -155,6 +155,12 @@ MOVE_LOSS_LIMIT_PCT: float = _env("MOVE_LOSS_LIMIT_PCT", 3.0)      # worst P&L o
 MAX_MARGIN_USE_PCT: float = _env("MAX_MARGIN_USE_PCT", 60.0)       # keep a buffer for gap margin calls
 BOOK_DELTA_LOTS: float = _env("BOOK_DELTA_LOTS", 3.0)              # net delta per book, in index lots
 # writer signals (writer_signals.py)
+# ---- PCR set (options.pcr_set): near-ATM window and its weights (ATM outwards); see docs/PCR_METHODOLOGY.md
+PCR_NEAR_STRIKES: int = _env("PCR_NEAR_STRIKES", 7)                  # 5, 7, 11 or 15 strikes around ATM
+PCR_WEIGHTS: str = _env("PCR_WEIGHTS", "1.0,0.9,0.7,0.5,0.4,0.3,0.2,0.1")   # ATM, ±1, ±2, …
+PCR_STABLE_BAND: float = _env("PCR_STABLE_BAND", 0.03)   # PCR change inside ± this = stable (calibrate per index)
+FLOW_MIN_SHARE: float = _env("FLOW_MIN_SHARE", 0.2)   # writing/buying balance (share of OI added) that counts as a lean
+
 # ---- open-play alerts (gap type → direction → whole number → PDH / PDL), chart_signals.open_play
 OPEN_GAP_PCT: float = _env("OPEN_GAP_PCT", 0.25)            # open vs previous close beyond this = gap up / down
 WHOLE_STEP_NIFTY: float = _env("WHOLE_STEP_NIFTY", 100.0)   # round-number spacing (points)

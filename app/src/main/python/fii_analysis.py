@@ -410,7 +410,7 @@ def setup_check(f: pd.DataFrame, banknifty: pd.DataFrame | None = None) -> dict:
 
 def chain_confirmation(direction: str, res: dict | None) -> dict | None:
     """Does the closing option chain agree?  Up: OTM calls within 1σ above spot being bought
-    (long build-up) and more puts than calls written today (PCR of the OI change > 1).
+    (long build-up) and more possible put writing than call writing today (OI up with premium down).
     Down: the mirror image."""
     if not res or not res.get("chain"):
         return None
@@ -419,18 +419,20 @@ def chain_confirmation(direction: str, res: dict | None) -> dict | None:
     if direction == "up":
         band = [r for r in res["chain"] if S < r["strike"] <= S + sig]
         bought = [r["strike"] for r in band if r.get("ce_buildup") == "Long build-up"]
-        pcr = summ.get("pcr_chg")
-        writers = pcr is not None and pcr > 1
-        txt_w = (f"PCR of today's OI change {pcr:.2f} ({'> 1: put writers defending' if writers else '≤ 1: no put-writing support'})"
-                 if pcr else "PCR change n/a")
+        fl = (res.get("pcr_set") or {}).get("flow") or {}
+        pw, cw = fl.get("pe_writing"), fl.get("ce_writing")
+        writers = pw is not None and cw is not None and pw > cw
+        txt_w = (f"possible put writing {pw / 1e3:.1f}k vs call writing {cw / 1e3:.1f}k contracts today (OI up, premium down)"
+                 if pw is not None and cw is not None else "OI flow n/a")
         side = "calls above spot"
     else:
         band = [r for r in res["chain"] if S - sig <= r["strike"] < S]
         bought = [r["strike"] for r in band if r.get("pe_buildup") == "Long build-up"]
-        pcr = summ.get("pcr_chg")
-        writers = pcr is not None and pcr < 1
-        txt_w = (f"PCR of today's OI change {pcr:.2f} ({'< 1: call writers capping' if writers else '≥ 1: no call-writing cap'})"
-                 if pcr else "PCR change n/a")
+        fl = (res.get("pcr_set") or {}).get("flow") or {}
+        pw, cw = fl.get("pe_writing"), fl.get("ce_writing")
+        writers = pw is not None and cw is not None and cw > pw
+        txt_w = (f"possible call writing {cw / 1e3:.1f}k vs put writing {pw / 1e3:.1f}k contracts today (OI up, premium down)"
+                 if pw is not None and cw is not None else "OI flow n/a")
         side = "puts below spot"
     share = len(bought) / len(band) if band else 0
     return {"underlying": res["underlying"], "bought_share": share, "bought": bought, "writers": writers,

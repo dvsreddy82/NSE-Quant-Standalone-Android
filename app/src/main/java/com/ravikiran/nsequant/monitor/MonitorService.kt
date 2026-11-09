@@ -123,6 +123,9 @@ class MonitorService : Service() {
             try {
                 val items = Api.get(this, "/api/alerts").arr("alerts").objects()
                 val seen = Prefs.seen(this)
+                // categories switched off in Settings: marked as seen, never notified
+                val off = Prefs.alertsOff(this)
+                items.filter { (it.s("cat") ?: "") in off }.forEach { seen.add(it.s("id") ?: "") }
                 // oldest first, so the newest lands on top of the notification shade
                 val fresh = items.filter { (it.s("id") ?: "") !in seen }.sortedBy { it.s("at") ?: "" }
                 // 15-minute direction calls: one notification per index, replaced each time; sound only on a change

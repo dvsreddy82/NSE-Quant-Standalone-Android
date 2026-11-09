@@ -201,6 +201,54 @@ def buildup(px_chg: float, oi_chg: float) -> str:
     return BUILDUP.get((_sgn(px_chg), _sgn(oi_chg)), "")
 
 
+def oi_flow(df: pd.DataFrame, px_ce: str = "ce_px_chg", px_pe: str = "pe_px_chg",
+            oi_ce: str = "ce_chg_oi", oi_pe: str = "pe_chg_oi") -> dict:
+    """OI additions / reductions per side and what they *possibly* are, from OI change with premium change
+    (OI up + premium down = possible writing, OI up + premium up = possible buying, OI down + premium up =
+    possible short covering, OI down + premium down = possible long unwinding).  Not confirmed identities."""
+    out = {}
+    for side, oc, pc in (("pe", oi_pe, px_pe), ("ce", oi_ce, px_ce)):
+        oi, px = df[oc].astype(float), df[pc].astype(float)
+        out[f"{side}_add"] = float(oi[oi > 0].sum())
+        out[f"{side}_cut"] = float(-oi[oi < 0].sum())
+        out[f"{side}_net"] = float(oi.sum())
+        out[f"{side}_writing"] = float(oi[(oi > 0) & (px < 0)].sum())
+        out[f"{side}_buying"] = float(oi[(oi > 0) & (px > 0)].sum())
+        out[f"{side}_covering"] = float(-oi[(oi < 0) & (px > 0)].sum())
+        out[f"{side}_unwinding"] = float(-oi[(oi < 0) & (px < 0)].sum())
+    out["chg_pcr"] = out["pe_add"] / out["ce_add"] if out["ce_add"] > 0 else None
+    added = out["pe_add"] + out["ce_add"]
+    # put writing and call buying lean bullish; call writing and put buying lean bearish (spec table)
+    bull = out["pe_writing"] + out["ce_buying"]
+    bear = out["ce_writing"] + out["pe_buying"]
+    out["flow_balance"] = (bull - bear) / added if added > 0 else None
+    return out
+
+
+def pcr_set(df: pd.DataFrame, S: float, step: float, n: int | None = None) -> dict:
+    """The PCR indicators of docs/PCR_METHODOLOGY.md for one expiry, each computed on its own:
+    overall OI PCR, volume PCR, change-in-OI PCR (additions only), n-strike and weighted PCR around ATM,
+    and the strongest put / call concentrations."""
+    n = n or config.PCR_NEAR_STRIKES
+    ce_oi, pe_oi = float(df.ce_oi.sum()), float(df.pe_oi.sum())
+    ce_v, pe_v = float(df.ce_vol.sum()), float(df.pe_vol.sum())
+    i_atm = int((df["strike"] - S).abs().idxmin())
+    half = n // 2
+    win = df.iloc[max(i_atm - half, 0): i_atm + half + 1]
+    w = [float(x) for x in str(config.PCR_WEIGHTS).split(",")]
+    wt = np.array([w[min(abs(j - i_atm), len(w) - 1)] for j in win.index])
+    near_ce, near_pe = float(win.ce_oi.sum()), float(win.pe_oi.sum())
+    wce, wpe = float((win.ce_oi * wt).sum()), float((win.pe_oi * wt).sum())
+    flow = oi_flow(df)
+    top = lambda col, k=3: [{"strike": float(r.strike), "oi": float(r[col])} for _, r in df.nlargest(k, col).iterrows()
+                            if r[col] > 0]
+    return {"oi_pcr": pe_oi / ce_oi if ce_oi else None, "vol_pcr": pe_v / ce_v if ce_v else None,
+            "chg_pcr": flow["chg_pcr"], "near_n": len(win),
+            "near_pcr": near_pe / near_ce if near_ce else None, "weighted_pcr": wpe / wce if wce else None,
+            "flow": flow, "top_put_oi": top("pe_oi"), "top_call_oi": top("ce_oi"),
+            "top_put_add": top("pe_chg_oi"), "top_call_add": top("ce_chg_oi")}
+
+
 def build_chain(df: pd.DataFrame, S: float, T: float, step: float, mp: float, lot: int) -> tuple[list[dict], dict]:
     """Per-strike rows for the option-chain table (±CHAIN_SIDE strikes around ATM)
     with IV, Greeks, price change, build-up and strike PCR, plus chain totals."""
@@ -234,8 +282,9 @@ def build_chain(df: pd.DataFrame, S: float, T: float, step: float, mp: float, lo
     above, below = df[df.strike >= S], df[df.strike <= S]
     summary = {
         "ce_oi": ce_oi, "pe_oi": pe_oi, "ce_chg_oi": ce_chg, "pe_chg_oi": pe_chg,
-        "pcr": pe_oi / ce_oi if ce_oi else None, "pcr_chg": pe_chg / ce_chg if ce_chg > 0 else None,
+        "pcr": pe_oi / ce_oi if ce_oi else None, "pcr_chg": oi_flow(df)["chg_pcr"],      # additions only
         "ce_vol": float(df.ce_vol.sum()), "pe_vol": float(df.pe_vol.sum()),
+        "vol_pcr": float(df.pe_vol.sum()) / float(df.ce_vol.sum()) if df.ce_vol.sum() else None,
         "resistance": float(above.loc[above.ce_oi.idxmax(), "strike"]) if len(above) and above.ce_oi.max() > 0 else None,
         "support": float(below.loc[below.pe_oi.idxmax(), "strike"]) if len(below) and below.pe_oi.max() > 0 else None,
         "res_add": float(above.loc[above.ce_chg_oi.idxmax(), "strike"]) if len(above) and above.ce_chg_oi.max() > 0 else None,
@@ -462,8 +511,9 @@ def analyze_chain(underlying: str, js: dict, expiry: str, daily: pd.DataFrame | 
 
     ce_oi, pe_oi = df.ce_oi.sum(), df.pe_oi.sum()
     pcr = pe_oi / ce_oi if ce_oi else None
-    chg_ce, chg_pe = df.ce_chg_oi.sum(), df.pe_chg_oi.sum()
-    pcr_chg = chg_pe / chg_ce if chg_ce > 0 else None
+    pset = pcr_set(df, S, step)
+    pcr_chg = pset["chg_pcr"]                        # put OI added / call OI added (reductions excluded)
+    flow_bal = pset["flow"]["flow_balance"]
     cwalls, pwalls = _walls(df, S, "call"), _walls(df, S, "put")
     mp = max_pain(df)
 
@@ -492,10 +542,10 @@ def analyze_chain(underlying: str, js: dict, expiry: str, daily: pd.DataFrame | 
         votes.append(1)
     elif "bear" in trend or "down" in trend:
         votes.append(-1)
-    if pcr is not None:
-        votes.append(1 if pcr > 1.2 else -1 if pcr < 0.8 else 0)
-    if pcr_chg is not None:
-        votes.append(1 if pcr_chg > 1.3 else -1 if pcr_chg < 0.7 else 0)
+    # one positioning vote, from OI change *with* premium change (writing vs buying) — not from the PCR level,
+    # which alone doesn't say bullish or bearish, and not twice from correlated PCR measures
+    if flow_bal is not None:
+        votes.append(1 if flow_bal >= config.FLOW_MIN_SHARE else -1 if flow_bal <= -config.FLOW_MIN_SHARE else 0)
     if signal.get("recommendation", "").startswith("ACCUMULATE"):
         votes.append(1)
     if signal.get("recommendation", "").startswith(("PROFIT BOOKING", "AVOID")):
@@ -587,6 +637,14 @@ def analyze_chain(underlying: str, js: dict, expiry: str, daily: pd.DataFrame | 
         "vrp": None if vrp is None else round(vrp, 2), "straddle": round(straddle, 2),
         "sigma_move": None if sigma_move is None else round(sigma_move, 1),
         "pcr": None if pcr is None else round(pcr, 2), "pcr_chg": None if pcr_chg is None else round(pcr_chg, 2),
+        "pcr_set": pset,
+        # every strike (not just the ±CHAIN_SIDE view): the intraday snapshots and the PCR board use these so the
+        # overall PCR covers the whole expiry and past / present compare like with like
+        "strikes_all": {float(r.strike): {"ce_oi": float(r.ce_oi), "pe_oi": float(r.pe_oi), "ce_ltp": float(r.ce_ltp),
+                                          "pe_ltp": float(r.pe_ltp), "ce_vol": float(r.ce_vol), "pe_vol": float(r.pe_vol),
+                                          "ce_iv": float(r.ce_iv) * 100 if r.ce_iv and not pd.isna(r.ce_iv) else None,
+                                          "pe_iv": float(r.pe_iv) * 100 if r.pe_iv and not pd.isna(r.pe_iv) else None}
+                        for r in df.itertuples()},
         "max_pain": mp, "call_walls": cwalls, "put_walls": pwalls, "skew": skew,
         "vix": vix_now, "vix_pct": vix_pct, "bias": bias, "adx": adx, "trend": regime.get("trend"),
         "checks": checks, "score": score, "verdict": verdict, "events": events,
@@ -653,7 +711,7 @@ def _explain(s, S, sigma_move, cwalls, pwalls, vrp, dte, bias, adx, events, sup,
                     if vrp >= 1.15 else "premium is roughly fair." if vrp >= 0.95
                     else "premium is cheap relative to actual movement — the main edge is missing."))
     if s["kind"] != "neutral":
-        why.append(f"Directional read is {bias} (trend, PCR and OI change), so only the side you expect "
+        why.append(f"Directional read is {bias} (trend and the OI writing / buying flow), so only the side you expect "
                    "price to move away from is sold.")
 
     if not s["defined_risk"]:

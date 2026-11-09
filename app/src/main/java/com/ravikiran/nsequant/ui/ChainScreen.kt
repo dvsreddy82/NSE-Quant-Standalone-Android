@@ -87,9 +87,11 @@ private fun ChainBody(d: JSONObject) {
                 }
                 val fresh = listOfNotNull(s.d("sup_add")?.let { "puts at ${Fmt.int(it)}" },
                     s.d("res_add")?.let { "calls at ${Fmt.int(it)}" })
-                if (fresh.isNotEmpty()) Text("Fresh writing today: ${fresh.joinToString(" · ")}", color = Pal.muted, fontSize = 11.sp)
+                if (fresh.isNotEmpty()) Text("Most OI added today: ${fresh.joinToString(" · ")}", color = Pal.muted, fontSize = 11.sp)
             }
         }
+        d.optJSONObject("signal")?.let { sg -> item { SignalCard(sg) } }
+        d.optJSONObject("pcr")?.takeIf { it.has("rows") }?.let { b -> item { PcrCard(b) } }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
                 listOf("CE OI" to 1.1f, "Chg" to 0.9f, "LTP" to 1f, "Strike" to 1.1f, "LTP" to 1f, "Chg" to 0.9f, "PE OI" to 1.1f)
@@ -145,5 +147,84 @@ private fun Bar(text: String, frac: Double, color: Color, fromRight: Boolean, mo
         contentAlignment = if (fromRight) Alignment.CenterEnd else Alignment.CenterStart) {
         Box(Modifier.fillMaxWidth(frac.toFloat().coerceIn(0.02f, 1f)).height(18.dp).background(color.copy(alpha = 0.3f)))
         Text(text, Modifier.fillMaxWidth(), fontSize = 11.sp, textAlign = TextAlign.Center)
+    }
+}
+
+
+/** PCR indicators now / 15 / 30 min ago with trend, the 15-minute OI flow and the combined read (pcr_board). */
+@Composable
+private fun PcrCard(b: org.json.JSONObject) {
+    Section("PCR · positioning and flow") {
+        val f2 = { v: Double? -> v?.let { String.format("%.2f", it) } ?: "—" }
+        Row(Modifier.fillMaxWidth()) {
+            listOf("Indicator" to 2.2f, "Now" to 0.8f, "15m" to 0.8f, "30m" to 0.8f, "Trend" to 1.2f).forEach { (h, w) ->
+                Text(h, Modifier.weight(w), color = Pal.faint, fontSize = 10.sp)
+            }
+        }
+        b.arr("rows").objects().filter { it.s("key") != "mom" }.forEach { r ->
+            val t = r.s("trend") ?: "—"
+            Row(Modifier.fillMaxWidth()) {
+                Text((r.s("name") ?: "") + if (r.s("key") == "wtd") " ★" else "", Modifier.weight(2.2f), fontSize = 11.sp,
+                    fontWeight = if (r.s("key") == "wtd") FontWeight.Bold else FontWeight.Normal)
+                Text(f2(r.d("now")), Modifier.weight(0.8f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(f2(r.d("m15")), Modifier.weight(0.8f), fontSize = 11.sp, color = Pal.muted)
+                Text(f2(r.d("m30")), Modifier.weight(0.8f), fontSize = 11.sp, color = Pal.muted)
+                Text(t, Modifier.weight(1.2f), fontSize = 10.sp,
+                    color = if (t.contains("ris")) Pal.up else if (t.contains("fall")) Pal.down else Pal.muted)
+            }
+        }
+        val read = b.s("read") ?: ""
+        Text("PCR read: $read", fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp),
+            color = if (read.contains("ullish")) Pal.up else if (read.contains("earish")) Pal.down else if (read.contains("sideways")) Pal.warn else Pal.text)
+        Text(b.s("why") ?: "", color = Pal.muted, fontSize = 11.sp)
+        b.optJSONObject("flow15")?.let { fl ->
+            Text("Last 15 min near ATM — put writing ${Fmt.short(fl.d("pe_writing"))}, put buying ${Fmt.short(fl.d("pe_buying"))}, " +
+                "call writing ${Fmt.short(fl.d("ce_writing"))}, call buying ${Fmt.short(fl.d("ce_buying"))}", color = Pal.muted, fontSize = 11.sp)
+        }
+        b.optJSONObject("levels")?.let { lv ->
+            Text("Largest put OI ${Fmt.int(lv.d("put_oi"))} · largest call OI ${Fmt.int(lv.d("call_oi"))} · local " +
+                "${Fmt.int(lv.d("local_support"))}–${Fmt.int(lv.d("local_resistance"))} (OI concentration, not confirmed S/R)",
+                color = Pal.muted, fontSize = 11.sp)
+        }
+        Text("★ weighted PCR trend is the positioning measure in the read. OI up + premium down = possible writing; " +
+            "up + up = possible buying. Not a forecast — confirm with spot, futures OI and IV.", color = Pal.faint, fontSize = 10.sp)
+    }
+}
+
+
+/** signal_engine: Strong Bullish … Strong Bearish / No Trade, confidence and the evidence behind it. */
+@Composable
+private fun SignalCard(sg: org.json.JSONObject) {
+    Section("Market signal · PCR + confirmation") {
+        val cls = sg.s("class") ?: "No Trade"
+        val col = if (cls.contains("Bullish")) Pal.up else if (cls.contains("Bearish")) Pal.down
+            else if (cls == "Neutral") Pal.warn else Pal.muted
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(cls, color = col, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("confidence ${sg.optInt("confidence")}/100", color = Pal.muted, fontSize = 12.sp)
+        }
+        val agree = sg.arr("agree").let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
+        sg.arr("evidence").objects().forEach { e ->
+            val avail = e.optBoolean("available")
+            val v = e.optInt("vote")
+            val tag = when {
+                !avail -> "— no data"
+                e.s("key") == "vol" -> "participation"
+                v > 0 -> "▲ bullish"
+                v < 0 -> "▼ bearish"
+                else -> "● neutral"
+            }
+            Row(Modifier.fillMaxWidth()) {
+                Text((if ((e.s("name") ?: "") in agree) "✓ " else "   ") + (e.s("name") ?: ""), Modifier.weight(1.4f),
+                    fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(tag, Modifier.weight(1f), fontSize = 11.sp,
+                    color = if (!avail) Pal.faint else if (v > 0 && e.s("key") != "vol") Pal.up
+                        else if (v < 0) Pal.down else Pal.muted)
+            }
+            Text(e.s("text") ?: "", color = Pal.muted, fontSize = 10.sp)
+        }
+        sg.arr("reasons").let { a -> for (i in 0 until a.length()) Text("• ${a.getString(i)}", color = Pal.warn, fontSize = 11.sp) }
+        Text("Confidence = share of the 5 evidence items agreeing (equal weights, uncalibrated) — not a probability. " +
+            "Analysis, not advice.", color = Pal.faint, fontSize = 10.sp)
     }
 }

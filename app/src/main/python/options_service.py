@@ -15,6 +15,7 @@ from collections import deque
 
 import pandas as pd
 
+import pcr_board
 import risk_engine
 from data_fetcher import pick_expiry
 from indicators import analyze
@@ -92,12 +93,17 @@ class OptionsService:
         engine, daily = self._engine_read(underlying)
         res = analyze_chain(underlying, js, exp, daily, self._vix(), engine)
         res["source"], res["source_note"] = source, note
+        res["as_of_ts"] = time.time()
         if not record:
             return res
         with self._lock:
             self.latest[underlying] = (time.time(), res)
             if source != "offline":
                 self.history.setdefault(underlying, deque(maxlen=400)).append(risk_engine.compact(res))
+        try:
+            res["pcr_board"] = pcr_board.build(res, self.intraday_history(underlying))
+        except Exception as exc:
+            log.warning("PCR board for %s failed: %s", underlying, exc)
         return res
 
     def intraday_history(self, underlying: str) -> list[dict]:

@@ -9,7 +9,8 @@ when to enter, when to book profit, when to adjust and when to get out.
   6  FUTURES BUILDUP        near-month future: long / short buildup, short covering, long unwinding
   7  WRITING CONDITIONS     once a day: IV rank (VIX percentile), IV vs realised vol, the chain's verdict
   8  OI WALL SHIFT          the biggest call / put OI strike moves (confirmed on two checks)
-  9  PCR EXTREME / SKEW     PCR past PCR_HIGH / PCR_LOW; put skew up SKEW_RISE_PTS since the open
+  9  PCR EXTREME / SKEW     PCR past PCR_HIGH / PCR_LOW on two checks running (with whether the additions look
+                           like writing or buying); put skew up SKEW_RISE_PTS since the open
   10 MAX PAIN PULL          last two days to expiry: where expiry tends to pin
   11 TIME-BASED EXIT        TIME_EXIT_DTE days or less to expiry with a short within TIME_EXIT_PCT
   12 DISCIPLINE             LOSING_STREAK_DAYS losing days in a row; more than MAX_ORDERS_PER_DAY orders today
@@ -61,6 +62,7 @@ class WriterWatch:
         self.store = store
         self._base: dict[tuple[str, str], dict] = {}        # (day, und) -> morning baselines
         self._wall_seen: dict[tuple[str, str], tuple[float, int]] = {}   # (und, side) -> (candidate, times seen)
+        self._pcr_seen: dict[str, str | None] = {}          # und -> PCR extreme side seen on the last check
 
     # ---------------------------------------------------------------- baselines
     def _baseline(self, day: str, und: str, res: dict) -> dict:
@@ -260,14 +262,24 @@ class WriterWatch:
             self._wall_seen.pop((und, side), None)
         # 9 PCR extremes and skew
         pcr = _f(res.get("pcr"))
-        if pcr is not None and pcr >= config.PCR_HIGH:
-            add("pcr", "AMBER", und, f"PCR extreme · {und} {pcr:.2f}",
-                f"Put OI is {pcr:.2f}× call OI — heavy put writing; crowded bullish positioning often snaps back. "
-                "Put writers: don't add near spot; a sharp dip can unwind it fast.", "high")
-        elif pcr is not None and pcr <= config.PCR_LOW:
-            add("pcr", "AMBER", und, f"PCR extreme · {und} {pcr:.2f}",
-                f"Call OI dominates (PCR {pcr:.2f}) — crowded bearish positioning; short covering rallies start from here. "
-                "Call writers: keep strikes wide.", "low")
+        side = "high" if pcr is not None and pcr >= config.PCR_HIGH else "low" if pcr is not None and pcr <= config.PCR_LOW else None
+        seen = self._pcr_seen.get(und)
+        self._pcr_seen[und] = side
+        if side and seen == side:                  # extreme on two checks in a row, not one snapshot
+            fl = (res.get("pcr_set") or {}).get("flow") or {}
+            if side == "high":
+                who = ("mostly possible put writing (OI up, premium down)" if fl.get("pe_writing", 0) > fl.get("pe_buying", 0)
+                       else "mostly possible put buying (OI up, premium up)" if fl.get("pe_buying") else "writing vs buying unclear")
+                add("pcr", "AMBER", und, f"PCR extreme · {und} {pcr:.2f}",
+                    f"Put OI is {pcr:.2f}× call OI; today's put additions are {who}. A high PCR is not bullish by "
+                    "itself — check spot, futures OI and IV. Put writers: positioning is crowded, don't add near spot.",
+                    "high")
+            else:
+                who = ("mostly possible call writing (OI up, premium down)" if fl.get("ce_writing", 0) > fl.get("ce_buying", 0)
+                       else "mostly possible call buying (OI up, premium up)" if fl.get("ce_buying") else "writing vs buying unclear")
+                add("pcr", "AMBER", und, f"PCR extreme · {und} {pcr:.2f}",
+                    f"Call OI dominates (PCR {pcr:.2f}); today's call additions are {who}. A low PCR is not bearish by "
+                    "itself — check spot, futures OI and IV. Call writers: keep strikes wide.", "low")
         sk, sk0 = _f(res.get("skew")), _f(base.get("skew"))
         if hm >= (9, 30) and sk is not None and sk0 is not None and sk - sk0 >= config.SKEW_RISE_PTS:
             add("skew", "AMBER", und, f"Put skew steepening · {und} +{sk - sk0:.1f} pts",

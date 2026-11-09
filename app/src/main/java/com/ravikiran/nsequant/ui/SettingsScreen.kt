@@ -151,6 +151,7 @@ fun SettingsScreen(onDone: () -> Unit) {
             "in use). Allow the app to run in the background in battery settings for alerts while the screen is off.",
             color = Pal.faint, fontSize = 11.sp)
         LockScreenCheck()
+        AlertSelection()
 
         Text("Engine activity", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         events.take(12).forEach { e ->

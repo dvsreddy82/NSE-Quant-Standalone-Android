@@ -20,6 +20,7 @@ import pandas as pd
 
 import chart_signals as cs
 import volume_watch
+import alert_prefs
 
 import config
 
@@ -162,7 +163,26 @@ class ApiRoutes:
                 "lot": res.get("lot"), "vix": res.get("vix"), "skew": res.get("skew"), "source": res.get("source"),
                 "timestamp": res.get("timestamp"), "summary": res.get("chain_summary"),
                 "verdict": res.get("verdict"), "score": res.get("score"),
+                "pcr": {k: v for k, v in (res.get("pcr_board") or {}).items() if k != "series"},
+                "signal": self._signal(und, res),
                 "rows": [{k: r.get(k) for k in keep} for r in rows[max(i - n, 0): i + n + 1]]}
+
+    def _signal(self, und: str, res: dict) -> dict | None:
+        """signal_engine classification (PCR read + spot / futures / IV / volume confirmation)."""
+        import signal_engine
+        from market_hours import market_open
+        feed = self.win.broker.feed
+        fut = None
+        if feed.live:
+            try:
+                k = feed.future_key(und)
+                fut = feed.tick(k) if k else None
+            except Exception:
+                fut = None
+        try:
+            return signal_engine.classify(res, self.win.options.intraday_history(und), fut, market_open=market_open())
+        except Exception:
+            return None
 
     def risk(self, _q):
         if time.time() - self.win._risk_at > 60:
@@ -296,7 +316,8 @@ class ApiRoutes:
         w = self.win.watch
         for a in w.recent_alerts(1, ("WRITER",)):
             items.append({"id": a["id"], "level": "WRITER", "source": "Writer signals", "title": a["title"],
-                          "text": a["text"], "severity": a.get("level"), "signal": a.get("signal")})
+                          "text": a["text"], "severity": a.get("level"), "signal": a.get("signal"),
+                          "cat": alert_prefs.category(a)})
         for a in w.recent_alerts(2, ("VOLUME",)):           # the after-close summary: until the next morning
             ts = pd.Timestamp(a["raised_at"])
             age = (pd.Timestamp.now(tz="UTC") - (ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC"))).total_seconds()
@@ -308,13 +329,16 @@ class ApiRoutes:
             age = (pd.Timestamp.now(tz="UTC") - (ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC"))).total_seconds()
             if age < (12 if a["kind"] == "GLOBAL" else 3) * 3600:
                 items.append({"id": a["id"], "level": a["kind"], "source": "Global markets" if a["kind"] == "GLOBAL"
-                              else "Level break", "title": a["title"], "text": a["text"], "severity": a.get("level")})
+                              else "Chart signal" if a.get("src") == "chart" else "Level break", "title": a["title"],
+                              "text": a["text"], "severity": a.get("level"), "cat": alert_prefs.category(a)})
         for und in ("NIFTY", "BANKNIFTY"):
             c = w.latest_call(und)
             if c and c.get("day") == str(date.today()):
                 items.append({"id": _id("dir", und, c["slot"]), "level": "DIRECTION", "source": "Direction call",
                               "title": f"{und} {c['slot'][-5:]} · {c['direction']} ({c['confidence']})",
                               "text": c["idea"], "dir": c["dir"], "changed": bool(c.get("changed"))})
+        for it in items:
+            it.setdefault("cat", alert_prefs.category(it))
         # newest first: each alert carries the time it was raised (or first seen, for standing alerts)
         now = datetime.now().astimezone()
         news_at = {_id("news", d["id"]): d.get("alerted_at") or d.get("published")
@@ -330,7 +354,7 @@ class ApiRoutes:
             ts = pd.Timestamp(t)
             it["at"] = (ts.tz_localize("UTC") if ts.tzinfo is None else ts).tz_convert(config.IST).isoformat()
         items.sort(key=lambda x: x["at"], reverse=True)
-        return {"alerts": items, "time": datetime.now()}
+        return {"alerts": items, "categories": alert_prefs.catalog_json(), "time": datetime.now()}
 
 
 
