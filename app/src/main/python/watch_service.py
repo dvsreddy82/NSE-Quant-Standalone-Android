@@ -240,6 +240,8 @@ class WatchService:
             if not last.get("outcome"):
                 last["outcome"] = mw.grade(last, res["spot"])
                 last["spot_after"] = res["spot"]
+                last["actual"] = mw.actual_state(last["spot"], res["spot"])
+                last["grade_v"] = mw.GRADE_V
                 self._save_call(last)
             call["changed"] = last["dir"] != call["dir"]
         else:
@@ -261,6 +263,9 @@ class WatchService:
             docs = self.store.find_docs("direction_calls", {"und": und, "day": day})
         except Exception:
             return []
+        changed = [d for d in docs if mw.regrade(d)]          # calls graded under an older rule
+        for d in changed:
+            self._save_call(d)
         return sorted(docs, key=lambda d: d["slot"])
 
     def latest_call(self, und: str) -> dict | None:

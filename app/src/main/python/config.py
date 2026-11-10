@@ -167,6 +167,7 @@ OPEN_GAP_PCT: float = _env("OPEN_GAP_PCT", 0.25)            # open vs previous c
 WHOLE_STEP_NIFTY: float = _env("WHOLE_STEP_NIFTY", 100.0)   # round-number spacing (points)
 WHOLE_STEP_BANKNIFTY: float = _env("WHOLE_STEP_BANKNIFTY", 500.0)
 NEAR_LEVEL_PCT: float = _env("NEAR_LEVEL_PCT", 0.10)        # "near" a whole number / PDH / PDL
+CALL_BAND_PCT: float = _env("CALL_BAND_PCT", 0.20)          # 15-min direction calls: BULLISH > +band, BEARISH < −band, else SIDEWAYS
 DIRECTION_PCT: float = _env("DIRECTION_PCT", 0.10)          # 15-min move that flips "going up" / "going down"
 MAX_DIRECTION_ALERTS: int = _env("MAX_DIRECTION_ALERTS", 4)  # direction-change alerts per index per day
 PROFIT_TAKE_PCT: float = _env("PROFIT_TAKE_PCT", 50.0)             # % of the credit captured: consider booking

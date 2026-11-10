@@ -493,14 +493,39 @@ def direction_call(res: dict, prev: dict | None, levels: list[dict] | None = Non
             "idea": idea, "put_strike": put_k, "call_strike": call_k, "pcr": pcr, "source": res.get("source")}
 
 
+GRADE_V = 2                  # grading rule version: 2 = symmetric ±CALL_BAND_PCT band (older calls are re-graded)
+
+
+def actual_state(spot0: float, spot1: float) -> str:
+    """What the next 15 minutes did: BULLISH above +CALL_BAND_PCT, BEARISH below −CALL_BAND_PCT, else SIDEWAYS
+    (the theta-decay regime)."""
+    mv = (spot1 - spot0) / spot0 * 100
+    band = config.CALL_BAND_PCT
+    return "BULLISH" if mv > band else "BEARISH" if mv < -band else "SIDEWAYS"
+
+
 def grade(call: dict, spot_now: float) -> str:
-    """Was the previous call right? (move > 0.05% in its direction; SIDEWAYS: within ±0.15%)."""
-    mv = (spot_now - call["spot"]) / call["spot"] * 100
-    if call["dir"] == "BULLISH":
-        return "right" if mv > 0.05 else "wrong" if mv < -0.05 else "flat"
-    if call["dir"] == "BEARISH":
-        return "right" if mv < -0.05 else "wrong" if mv > 0.05 else "flat"
-    return "right" if abs(mv) <= 0.15 else "wrong"
+    """Was the call right?  Right when the move 15 minutes later is in the state it called (actual_state)."""
+    return "right" if call["dir"] == actual_state(call["spot"], spot_now) else "wrong"
+
+
+def regrade(call: dict, keys=(("dir", "outcome"),)) -> bool:
+    """Re-grade a stored call made under an older rule (needs spot and spot_after).  True if it changed."""
+    if call.get("grade_v") == GRADE_V or not call.get("spot") or not call.get("spot_after"):
+        return False
+    for dk, ok in keys:
+        d = call.get(dk)
+        if isinstance(d, dict):
+            d = d.get("class")
+        d = {"Strong Bullish": "BULLISH", "Bullish": "BULLISH", "Neutral": "SIDEWAYS", "Bearish": "BEARISH",
+             "Strong Bearish": "BEARISH"}.get(d, d)
+        if d in ("BULLISH", "BEARISH", "SIDEWAYS"):
+            call[ok] = grade({"dir": d, "spot": call["spot"]}, call["spot_after"])
+        elif ok in call and dk != "dir":
+            call[ok] = "no trade"
+    call["actual"] = actual_state(call["spot"], call["spot_after"])
+    call["grade_v"] = GRADE_V
+    return True
 
 
 def call_slots(day: date) -> list[datetime]:
