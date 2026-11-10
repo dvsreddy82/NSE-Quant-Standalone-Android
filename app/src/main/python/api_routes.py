@@ -274,6 +274,12 @@ class ApiRoutes:
                                 for k in ("ma", "ema")}}
         vol = getattr(self.win, "volume", None)
         out["volume"] = volume_watch.summary_lines(vol.latest() if vol else None, 5)
+        an = getattr(self.win, "ai_analyst", None)
+        for und in ("NIFTY", "BANKNIFTY"):
+            a = an.latest(und) if an else None
+            out[und]["ai"] = {k: a.get(k) for k in ("slot", "dir", "confidence", "signal_class", "valid",
+                                                    "agrees_with_rules", "reasons", "outcome")} \
+                if a and a.get("dir") else None
         ms = getattr(self.win, "summary", None)
         out["summary"] = market_summary.lines(ms.latest() if ms else None)
         return {**out, "alerts": [_alert_out(a) for a in w.recent_alerts(1, ("LEVEL",))],

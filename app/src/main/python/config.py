@@ -154,6 +154,7 @@ DAILY_LOSS_LIMIT_PCT: float = _env("DAILY_LOSS_LIMIT_PCT", 2.0)    # stop adding
 MOVE_LOSS_LIMIT_PCT: float = _env("MOVE_LOSS_LIMIT_PCT", 3.0)      # worst P&L of a book for a 4% move
 MAX_MARGIN_USE_PCT: float = _env("MAX_MARGIN_USE_PCT", 60.0)       # keep a buffer for gap margin calls
 BOOK_DELTA_LOTS: float = _env("BOOK_DELTA_LOTS", 3.0)              # net delta per book, in index lots
+BROKERAGE_PER_ORDER: float = _env("BROKERAGE_PER_ORDER", 20.0)    # ₹ per executed order, for the Close & move cost estimate
 # writer signals (writer_signals.py)
 # ---- PCR set (options.pcr_set): near-ATM window and its weights (ATM outwards); see docs/PCR_METHODOLOGY.md
 PCR_NEAR_STRIKES: int = _env("PCR_NEAR_STRIKES", 7)                  # 5, 7, 11 or 15 strikes around ATM

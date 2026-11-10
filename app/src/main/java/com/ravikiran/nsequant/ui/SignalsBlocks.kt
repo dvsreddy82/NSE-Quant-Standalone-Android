@@ -53,6 +53,19 @@ fun SignalsBlock(sig: JSONObject) {
                     if (n > 0) Text("${u.d("hits")?.toInt()}/$n right", color = Pal.faint, fontSize = 10.sp)
                 }
                 c?.s("idea")?.let { Text(it, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp)) }
+                u.obj("ai")?.let { a ->
+                    val (fg, _) = dirColors(a.s("dir"))
+                    val same = a.s("dir") == c?.s("dir")
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp)) {
+                        Text("⚖ AI", color = Pal.muted, fontSize = 11.sp)
+                        Text(a.s("dir") ?: "", color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("${a.d("confidence")?.toInt() ?: 0}% · ${a.s("signal_class") ?: ""} · " +
+                            when { c == null -> "no rules call yet"; same -> "agrees with the rules"
+                                   else -> "differs from the rules" },
+                            color = if (same || c == null) Pal.faint else Pal.warn, fontSize = 11.sp)
+                    }
+                }
                 val spot = u.d("spot") ?: c?.d("spot")
                 val lv = u.arr("levels").objects()
                 if (spot != null && lv.isNotEmpty()) {
