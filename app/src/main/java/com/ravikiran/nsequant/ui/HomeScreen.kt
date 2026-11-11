@@ -50,7 +50,7 @@ fun HomeScreen(monitorOn: Boolean, onMonitor: (Boolean) -> Unit) {
                         Text("Market monitor", fontWeight = FontWeight.Bold)
                         Text("Live BANKNIFTY in the notification bar + alerts: risk, level breaks, " +
                             "15-min direction calls, global moves, news",
-                            color = Pal.muted, fontSize = 12.sp)
+                            color = Pal.muted, fontSize = 14.sp)
                     }
                     Switch(checked = monitorOn, onCheckedChange = onMonitor)
                 }
@@ -63,7 +63,7 @@ fun HomeScreen(monitorOn: Boolean, onMonitor: (Boolean) -> Unit) {
             alerts.data?.let { a ->
                 val items = a.arr("alerts").objects().sortedByDescending { it.s("at") ?: "" }    // newest first
                 Section("Active alerts (${items.size}) · newest first") {
-                    if (items.isEmpty()) Text("None right now.", color = Pal.muted, fontSize = 12.sp)
+                    if (items.isEmpty()) Text("None right now.", color = Pal.muted, fontSize = 14.sp)
                     items.forEach { x ->
                         val wr = x.s("level") == "WRITER"
                         AlertCard(if (wr) x.s("severity") ?: "AMBER" else x.s("level") ?: "",
@@ -77,7 +77,7 @@ fun HomeScreen(monitorOn: Boolean, onMonitor: (Boolean) -> Unit) {
             news.data?.let { n ->
                 val items = n.arr("items").objects().filter { it.s("impact") != "LOW" }.take(12)
                 Section("Market news (last 12 h)") {
-                    if (items.isEmpty()) Text("No high- or medium-impact headlines.", color = Pal.muted, fontSize = 12.sp)
+                    if (items.isEmpty()) Text("No high- or medium-impact headlines.", color = Pal.muted, fontSize = 14.sp)
                     items.forEach { x -> NewsRow(x) { x.s("link")?.let { runCatching { uri.openUri(it) } } } }
                 }
             }
@@ -93,10 +93,10 @@ fun HomeScreen(monitorOn: Boolean, onMonitor: (Boolean) -> Unit) {
                 Section("Indices · ${o.s("source") ?: ""}") {
                     o.arr("indices").objects().forEach { r ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(r.s("name") ?: "", Modifier.weight(1f), fontSize = 13.sp)
-                            Text(Fmt.px(r.d("last")), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(r.s("name") ?: "", Modifier.weight(1f), fontSize = 15.sp)
+                            Text(Fmt.px(r.d("last")), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                             Spacer(Modifier.width(10.dp))
-                            Text(Fmt.pct(r.d("pct")), color = Pal.chg(r.d("pct")), fontSize = 13.sp,
+                            Text(Fmt.pct(r.d("pct")), color = Pal.chg(r.d("pct")), fontSize = 15.sp,
                                 modifier = Modifier.width(64.dp))
                         }
                     }
@@ -104,7 +104,7 @@ fun HomeScreen(monitorOn: Boolean, onMonitor: (Boolean) -> Unit) {
                         if (f.has("score")) {
                             Text("FII/DII ${f.s("as_of")?.take(10)}: FII ${Fmt.rupees(f.d("fii_cash"))} cr · DII " +
                                 "${Fmt.rupees(f.d("dii_cash"))} cr · read ${f.s("bias")} (${Fmt.signed(f.d("score"), 0)})",
-                                color = Pal.muted, fontSize = 11.sp)
+                                color = Pal.muted, fontSize = 13.sp)
                         }
                     }
                 }
@@ -131,14 +131,14 @@ private fun NewsRow(x: JSONObject, onOpen: () -> Unit) {
             Badge(impact, fg, bg)
             val tone = x.s("tone")
             Text(when (tone) { "positive" -> "▲"; "negative" -> "▼"; else -> "•" },
-                color = when (tone) { "positive" -> Pal.up; "negative" -> Pal.down; else -> Pal.muted }, fontSize = 12.sp)
+                color = when (tone) { "positive" -> Pal.up; "negative" -> Pal.down; else -> Pal.muted }, fontSize = 14.sp)
             Text(x.s("published")?.let { if (it.length >= 16) it.substring(11, 16) + " UTC" else it } ?: "",
-                color = Pal.faint, fontSize = 10.sp)
-            Text(x.arr("tags").strings().joinToString(" · "), color = Pal.faint, fontSize = 10.sp)
+                color = Pal.faint, fontSize = 12.sp)
+            Text(x.arr("tags").strings().joinToString(" · "), color = Pal.faint, fontSize = 12.sp)
         }
-        Text((if (x.b("alerted")) "🔔 " else "") + (x.s("title") ?: ""), fontSize = 13.sp,
+        Text((if (x.b("alerted")) "🔔 " else "") + (x.s("title") ?: ""), fontSize = 15.sp,
             fontWeight = if (impact == "HIGH") FontWeight.SemiBold else FontWeight.Normal)
-        Text(x.arr("sources").strings().joinToString(", "), color = Pal.faint, fontSize = 10.sp)
+        Text(x.arr("sources").strings().joinToString(", "), color = Pal.faint, fontSize = 12.sp)
     }
 }
 
@@ -149,14 +149,14 @@ private fun TickerBlock(t: JSONObject) {
             val big = i == 0
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
-                    Text(q.s("name") ?: "", color = Pal.muted, fontSize = if (big) 12.sp else 11.sp)
+                    Text(q.s("name") ?: "", color = Pal.muted, fontSize = if (big) 14.sp else 13.sp)
                     Text(Fmt.px(q.d("last")), fontSize = if (big) 28.sp else 18.sp, fontWeight = FontWeight.ExtraBold)
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text("${Fmt.signed(q.d("chg"))}  ${Fmt.pct(q.d("pct"))}", color = Pal.chg(q.d("chg")),
-                        fontWeight = FontWeight.Bold, fontSize = if (big) 15.sp else 13.sp)
+                        fontWeight = FontWeight.Bold, fontSize = if (big) 16.sp else 15.sp)
                     if (q.d("high") != null) {
-                        Text("H ${Fmt.px1(q.d("high"))} · L ${Fmt.px1(q.d("low"))}", color = Pal.muted, fontSize = 11.sp)
+                        Text("H ${Fmt.px1(q.d("high"))} · L ${Fmt.px1(q.d("low"))}", color = Pal.muted, fontSize = 13.sp)
                     }
                 }
             }
@@ -172,14 +172,14 @@ private fun TickerBlock(t: JSONObject) {
                 "down" -> Badge("⚑▼ setup", Pal.down, Pal.redBg)
             }
         }
-        Text(t.s("source") ?: "", color = Pal.faint, fontSize = 10.sp)
+        Text(t.s("source") ?: "", color = Pal.faint, fontSize = 12.sp)
     }
 }
 
 @Composable
 private fun PositionsBlock(p: JSONObject) {
     if (p.b("loading")) {
-        Section("My positions") { Text("Loading your positions…", color = Pal.muted, fontSize = 12.sp) }
+        Section("My positions") { Text("Loading your positions…", color = Pal.muted, fontSize = 14.sp) }
         return
     }
     val groups = p.arr("positions").objects()
@@ -191,17 +191,17 @@ private fun PositionsBlock(p: JSONObject) {
         p.obj("limits")?.let { l ->
             if (l.d("margin_used") != null) KV("Margin used / available", "₹${Fmt.int(l.d("margin_used"))} / ₹${Fmt.int(l.d("available"))}")
         }
-        if (groups.isEmpty()) Text("No open positions.", color = Pal.muted, fontSize = 12.sp)
+        if (groups.isEmpty()) Text("No open positions.", color = Pal.muted, fontSize = 14.sp)
         groups.forEach { g ->
             Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("${g.s("und")} ${g.s("expiry")?.take(10)} · ${g.s("structure")}", Modifier.weight(1f),
-                        fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Text(Fmt.rupees(g.d("open_pnl")), color = Pal.chg(g.d("open_pnl")), fontWeight = FontWeight.Bold)
                 }
                 Text("Credit ${Fmt.rupees(g.d("credit")).removePrefix("+")} · captured " +
                     (g.d("captured")?.let { String.format("%.0f%%", it * 100) } ?: "—") +
-                    (g.d("dte")?.let { " · ${it.toInt()} DTE" } ?: ""), color = Pal.muted, fontSize = 11.sp)
+                    (g.d("dte")?.let { " · ${it.toInt()} DTE" } ?: ""), color = Pal.muted, fontSize = 13.sp)
                 g.arr("alerts").objects().forEach { a ->
                     val lv = when (a.s("level")) { "stop" -> "RED"; "warn" -> "AMBER"; "book" -> "GREEN"; else -> "" }
                     Spacer(Modifier.padding(2.dp))
@@ -209,10 +209,10 @@ private fun PositionsBlock(p: JSONObject) {
                 }
                 g.arr("legs").objects().filter { (it.d("qty") ?: 0.0) != 0.0 }.forEach { l ->
                     Row(Modifier.fillMaxWidth().padding(top = 2.dp)) {
-                        Text(l.s("tsym") ?: "", Modifier.weight(1f), fontSize = 11.sp, color = Pal.muted)
-                        Text("${l.d("qty")?.toInt()} @ ${Fmt.px(l.d("avg"))} → ${Fmt.px(l.d("ltp"))}", fontSize = 11.sp)
+                        Text(l.s("tsym") ?: "", Modifier.weight(1f), fontSize = 13.sp, color = Pal.muted)
+                        Text("${l.d("qty")?.toInt()} @ ${Fmt.px(l.d("avg"))} → ${Fmt.px(l.d("ltp"))}", fontSize = 13.sp)
                         Spacer(Modifier.width(8.dp))
-                        Text(Fmt.rupees(l.d("mtm")), color = Pal.chg(l.d("mtm")), fontSize = 11.sp,
+                        Text(Fmt.rupees(l.d("mtm")), color = Pal.chg(l.d("mtm")), fontSize = 13.sp,
                             modifier = Modifier.width(70.dp))
                     }
                 }

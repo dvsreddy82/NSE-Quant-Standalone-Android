@@ -40,30 +40,30 @@ fun SignalsBlock(sig: JSONObject) {
             val c = u.obj("call")
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(und, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(und, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     if (c != null) {
                         val (fg, bg) = dirColors(c.s("dir"))
                         Badge(c.s("direction") ?: "", fg, bg)
-                        Text("${c.s("confidence")} · ${c.s("slot")?.takeLast(5)}", color = Pal.muted, fontSize = 11.sp)
+                        Text("${c.s("confidence")} · ${c.s("slot")?.takeLast(5)}", color = Pal.muted, fontSize = 13.sp)
                     } else {
-                        Text("first call at 9:30 am", color = Pal.muted, fontSize = 11.sp)
+                        Text("first call at 9:30 am", color = Pal.muted, fontSize = 13.sp)
                     }
                     Spacer(Modifier.weight(1f))
                     val n = u.d("graded")?.toInt() ?: 0
-                    if (n > 0) Text("${u.d("hits")?.toInt()}/$n right", color = Pal.faint, fontSize = 10.sp)
+                    if (n > 0) Text("${u.d("hits")?.toInt()}/$n right", color = Pal.faint, fontSize = 12.sp)
                 }
-                c?.s("idea")?.let { Text(it, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp)) }
+                c?.s("idea")?.let { Text(it, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp)) }
                 u.obj("ai")?.let { a ->
                     val (fg, _) = dirColors(a.s("dir"))
                     val same = a.s("dir") == c?.s("dir")
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.padding(top = 2.dp)) {
-                        Text("⚖ AI", color = Pal.muted, fontSize = 11.sp)
-                        Text(a.s("dir") ?: "", color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("⚖ AI", color = Pal.muted, fontSize = 13.sp)
+                        Text(a.s("dir") ?: "", color = fg, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Text("${a.d("confidence")?.toInt() ?: 0}% · ${a.s("signal_class") ?: ""} · " +
                             when { c == null -> "no rules call yet"; same -> "agrees with the rules"
                                    else -> "differs from the rules" },
-                            color = if (same || c == null) Pal.faint else Pal.warn, fontSize = 11.sp)
+                            color = if (same || c == null) Pal.faint else Pal.warn, fontSize = 13.sp)
                     }
                 }
                 val spot = u.d("spot") ?: c?.d("spot")
@@ -74,12 +74,12 @@ fun SignalsBlock(sig: JSONObject) {
                     Text(listOfNotNull(
                         below?.let { "Support ${Fmt.int(it.d("price"))} ${it.s("name")}" + (it.s("status")?.let { s -> " ($s)" } ?: "") },
                         above?.let { "Resistance ${Fmt.int(it.d("price"))} ${it.s("name")}" + (it.s("status")?.let { s -> " ($s)" } ?: "") },
-                    ).joinToString("  ·  "), color = Pal.muted, fontSize = 11.sp)
+                    ).joinToString("  ·  "), color = Pal.muted, fontSize = 13.sp)
                 }
                 u.optJSONObject("ema")?.let { EmaTable(it) }
                 val chart = u.arr("chart")
                 for (i in 0 until minOf(chart.length(), 8)) {
-                    Text(chart.getString(i).removePrefix("- "), color = Pal.faint, fontSize = 10.sp)
+                    Text(chart.getString(i).removePrefix("- "), color = Pal.faint, fontSize = 12.sp)
                 }
             }
         }
@@ -88,7 +88,7 @@ fun SignalsBlock(sig: JSONObject) {
         }
         val sum = sig.arr("summary")
         if (sum.length() > 1) {
-            Text("🗒 ${sum.getString(0)}", color = Pal.muted, fontSize = 12.sp,
+            Text("🗒 ${sum.getString(0)}", color = Pal.muted, fontSize = 14.sp,
                 fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
             var section = ""
             for (i in 1 until sum.length()) {
@@ -96,26 +96,26 @@ fun SignalsBlock(sig: JSONObject) {
                 val sec = line.substringBefore(": ")
                 if (sec != section) {
                     section = sec
-                    Text(sec, color = Pal.text, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    Text(sec, color = Pal.text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 4.dp))
                 }
-                Text("• " + line.substringAfter(": "), color = Pal.muted, fontSize = 11.sp)
+                Text("• " + line.substringAfter(": "), color = Pal.muted, fontSize = 13.sp)
             }
         }
         val vol = sig.arr("volume")
         if (vol.length() > 1) {
-            Text("📊 Unusual volume · ${vol.getString(0)}", color = Pal.muted, fontSize = 12.sp,
+            Text("📊 Unusual volume · ${vol.getString(0)}", color = Pal.muted, fontSize = 14.sp,
                 fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
             for (i in 1 until minOf(vol.length(), 14)) {
                 val line = vol.getString(i)
                 val head = !line.startsWith("  ")
-                Text(line.trim(), color = if (head) Pal.text else Pal.muted, fontSize = if (head) 12.sp else 11.sp,
+                Text(line.trim(), color = if (head) Pal.text else Pal.muted, fontSize = if (head) 14.sp else 13.sp,
                     fontWeight = if (head) FontWeight.Bold else FontWeight.Normal)
             }
         }
         val wr = sig.arr("writer").objects()
         if (wr.isNotEmpty()) {
-            Text("Writer signals today (${wr.size}) · newest first", color = Pal.muted, fontSize = 12.sp,
+            Text("Writer signals today (${wr.size}) · newest first", color = Pal.muted, fontSize = 14.sp,
                 fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
             wr.take(8).forEach { a ->
                 AlertCard(a.s("level") ?: "AMBER", "✍ " + (a.s("title") ?: ""), listOf(a.s("text") ?: ""))
@@ -133,22 +133,22 @@ fun GlobalBlock(g: JSONObject) {
     Section("Global markets") {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(cue.s("read") ?: "—", color = col, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-            Text("open read ${Fmt.signed(score, 0)}", color = Pal.muted, fontSize = 11.sp)
+            Text("open read ${Fmt.signed(score, 0)}", color = Pal.muted, fontSize = 13.sp)
         }
-        cue.s("writer")?.let { Text(it, fontSize = 12.sp) }
+        cue.s("writer")?.let { Text(it, fontSize = 14.sp) }
         val drivers = cue.arr("drivers").strings()
-        if (drivers.isNotEmpty()) Text(drivers.joinToString(" · "), color = Pal.muted, fontSize = 11.sp)
+        if (drivers.isNotEmpty()) Text(drivers.joinToString(" · "), color = Pal.muted, fontSize = 13.sp)
         Spacer(Modifier.padding(2.dp))
         g.arr("quotes").objects().forEach { q ->
             val bps = q.s("unit") == "bps"
             val big = (q.d("move")?.let { abs(it) } ?: 0.0) >= (q.d("threshold") ?: 99.0)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(q.s("name") ?: "", Modifier.weight(1f), fontSize = 12.sp,
+                Text(q.s("name") ?: "", Modifier.weight(1f), fontSize = 14.sp,
                     fontWeight = if (big) FontWeight.Bold else FontWeight.Normal)
-                Text(if (bps) String.format("%.3f%%", q.d("last") ?: 0.0) else Fmt.px(q.d("last")), fontSize = 12.sp)
+                Text(if (bps) String.format("%.3f%%", q.d("last") ?: 0.0) else Fmt.px(q.d("last")), fontSize = 14.sp)
                 Spacer(Modifier.width(10.dp))
                 Text(if (bps) Fmt.signed(q.d("move"), 0) + " bps" else Fmt.pct(q.d("pct")),
-                    color = Pal.chg(q.d("chg")), fontSize = 12.sp,
+                    color = Pal.chg(q.d("chg")), fontSize = 14.sp,
                     fontWeight = if (big) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.width(72.dp))
             }
         }
@@ -162,15 +162,15 @@ private fun EmaTable(e: JSONObject) {
     listOf(Triple("ma", "EMA 34 × 50", "short" to "long"), Triple("ema", "EMA 10 × 20", "fast" to "slow")).forEach { (k, title, keys) ->
         val rows = e.arr(k).objects()
         if (rows.isEmpty()) return@forEach
-        Text(title, fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
         rows.forEach { r ->
             val st = r.s("status") ?: "N/A"
             Row(Modifier.fillMaxWidth()) {
-                Text(r.s("tf") ?: "", Modifier.weight(0.6f), fontSize = 10.sp)
-                Text(Fmt.px1(r.d(keys.first)), Modifier.weight(1f), fontSize = 10.sp)
-                Text(Fmt.px1(r.d(keys.second)), Modifier.weight(1f), fontSize = 10.sp)
-                Text(r.d("gap_pct")?.let { String.format("%+.2f%%", it) } ?: "—", Modifier.weight(0.8f), fontSize = 10.sp)
-                Text(st, Modifier.weight(1.1f), fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                Text(r.s("tf") ?: "", Modifier.weight(0.6f), fontSize = 12.sp)
+                Text(Fmt.px1(r.d(keys.first)), Modifier.weight(1f), fontSize = 12.sp)
+                Text(Fmt.px1(r.d(keys.second)), Modifier.weight(1f), fontSize = 12.sp)
+                Text(r.d("gap_pct")?.let { String.format("%+.2f%%", it) } ?: "—", Modifier.weight(0.8f), fontSize = 12.sp)
+                Text(st, Modifier.weight(1.1f), fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     color = if (st == "BULLISH") Pal.up else if (st == "BEARISH") Pal.down else if (st == "NEAR CROSS") Pal.warn else Pal.faint)
             }
         }

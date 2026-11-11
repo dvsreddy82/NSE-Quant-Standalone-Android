@@ -12,8 +12,8 @@ object Pal {
     val panel2 = Color(0xFF0F172A)
     val border = Color(0xFF1F2937)
     val text = Color(0xFFE5E7EB)
-    val muted = Color(0xFF94A3B8)
-    val faint = Color(0xFF64748B)
+    val muted = Color(0xFFCBD5E1)      // brighter for readability
+    val faint = Color(0xFF9CA3AF)
     val accent = Color(0xFF38BDF8)
     val up = Color(0xFF22C55E)
     val down = Color(0xFFEF4444)

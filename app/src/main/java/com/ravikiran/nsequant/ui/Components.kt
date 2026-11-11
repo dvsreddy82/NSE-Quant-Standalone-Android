@@ -71,7 +71,7 @@ fun Section(title: String? = null, modifier: Modifier = Modifier, content: @Comp
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (title != null) {
-            Text(title.uppercase(), color = Pal.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+            Text(title.uppercase(), color = Pal.muted, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp)
         }
         content()
@@ -80,7 +80,7 @@ fun Section(title: String? = null, modifier: Modifier = Modifier, content: @Comp
 
 @Composable
 fun Badge(text: String, fg: Color, bg: Color) {
-    Text(text, color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+    Text(text, color = fg, fontSize = 13.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.background(bg, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp))
 }
 
@@ -98,9 +98,9 @@ fun AlertCard(level: String, title: String, lines: List<String>, action: String?
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).background(bg, RoundedCornerShape(8.dp))) {
         Box(Modifier.width(4.dp).fillMaxHeight().background(edge))
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text("[$level] $title", color = edge, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            lines.forEach { Text("• $it", color = fg, fontSize = 12.sp) }
-            if (!action.isNullOrBlank()) Text("→ $action", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text("[$level] $title", color = edge, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            lines.forEach { Text("• $it", color = fg, fontSize = 14.sp) }
+            if (!action.isNullOrBlank()) Text("→ $action", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
     }
 }
@@ -111,7 +111,7 @@ fun Loading(state: ApiState, content: @Composable (JSONObject) -> Unit) {
     when {
         d != null -> {
             if (state.error != null) {
-                Text("⚠ ${state.error} (showing last data)", color = Pal.warn, fontSize = 11.sp,
+                Text("⚠ ${state.error} (showing last data)", color = Pal.warn, fontSize = 13.sp,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
             }
             content(d)
@@ -126,7 +126,7 @@ fun Loading(state: ApiState, content: @Composable (JSONObject) -> Unit) {
 @Composable
 fun KV(k: String, v: String, color: Color = Pal.text) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(k, color = Pal.muted, fontSize = 12.sp)
-        Text(v, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(k, color = Pal.muted, fontSize = 14.sp)
+        Text(v, color = color, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     }
 }

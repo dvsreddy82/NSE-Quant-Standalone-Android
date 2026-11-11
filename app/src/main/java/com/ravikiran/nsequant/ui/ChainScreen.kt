@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +37,7 @@ import com.ravikiran.nsequant.data.d
 import com.ravikiran.nsequant.data.obj
 import com.ravikiran.nsequant.data.objects
 import com.ravikiran.nsequant.data.s
+import com.ravikiran.nsequant.data.strings
 import org.json.JSONObject
 
 private val CE = Color(0xFFEF4444)
@@ -43,14 +47,93 @@ private val ITM = Color(0x1AFACC15)
 @Composable
 fun ChainScreen() {
     var und by rememberSaveable { mutableStateOf("NIFTY") }
-    val st = rememberApi("/api/chain?und=$und&n=15", 8_000)
+    var mode by rememberSaveable { mutableStateOf("2exp") }
     Column {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("NIFTY", "BANKNIFTY").forEach { u ->
                 FilterChip(selected = und == u, onClick = { und = u }, label = { Text(u) })
             }
+            Box(Modifier.weight(1f))
+            FilterChip(selected = mode == "2exp", onClick = { mode = if (mode == "2exp") "chain" else "2exp" },
+                label = { Text(if (mode == "2exp") "2 expiries" else "Full chain") })
         }
-        Loading(st) { d -> if (d.s("underlying") == und) ChainBody(d) }
+        if (mode == "2exp") {
+            ExpiryCompare(und)
+        } else {
+            val st = rememberApi("/api/chain?und=$und&n=15", 8_000)
+            Loading(st) { d -> if (d.s("underlying") == und) ChainBody(d) }
+        }
+    }
+}
+
+/** Call / put premiums of two expiries side by side, strikes around ATM — minimal on purpose. */
+@Composable
+private fun ExpiryCompare(und: String) {
+    var e1 by rememberSaveable(und) { mutableStateOf("") }
+    var e2 by rememberSaveable(und) { mutableStateOf("") }
+    val q = "/api/expiry_compare?und=$und&n=8" + (if (e1.isNotEmpty()) "&e1=$e1" else "") +
+        (if (e2.isNotEmpty()) "&e2=$e2" else "")
+    val st = rememberApi(q.replace(" ", "%20"), 30_000)
+    Loading(st) { d ->
+        if (d.s("und") != und) return@Loading
+        val a = d.obj("e1") ?: JSONObject()
+        val b = d.obj("e2") ?: JSONObject()
+        val exps = d.arr("expiries").strings()
+        val atm = d.d("atm")
+        LazyColumn(contentPadding = PaddingValues(bottom = 12.dp)) {
+            item {
+                Section {
+                    Text("$und ${Fmt.px(d.d("spot"))} · ATM ${Fmt.int(atm)}", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ExpiryPick("Near", a, exps, Modifier.weight(1f)) { e1 = it }
+                        ExpiryPick("Far", b, exps, Modifier.weight(1f)) { e2 = it }
+                    }
+                }
+            }
+            item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    listOf("CE near", "CE far", "Strike", "PE near", "PE far").forEach {
+                        Text(it, Modifier.weight(1f), color = Pal.muted, fontSize = 13.sp, textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            items(d.arr("rows").objects()) { r ->
+                val isAtm = r.d("strike") == atm
+                Row(Modifier.fillMaxWidth().background(if (isAtm) Pal.panel2 else Color.Transparent)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    val cell = @Composable { v: Double?, c: Color, bold: Boolean ->
+                        Text(v?.let { String.format("%,.1f", it) } ?: "—", Modifier.weight(1f), color = c,
+                            fontSize = 15.sp, textAlign = TextAlign.Center,
+                            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal)
+                    }
+                    cell(r.d("ce1"), CE, false)
+                    cell(r.d("ce2"), CE, false)
+                    Text(Fmt.int(r.d("strike")), Modifier.weight(1f), fontSize = 15.sp, textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold)
+                    cell(r.d("pe1"), PE, false)
+                    cell(r.d("pe2"), PE, false)
+                }
+            }
+            item {
+                Text("Last traded premiums · far − near is what the extra time costs · refreshes every 30 s",
+                    color = Pal.faint, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpiryPick(label: String, e: JSONObject, exps: List<String>, modifier: Modifier, onPick: (String) -> Unit) {
+    var open by androidx.compose.runtime.remember { mutableStateOf(false) }
+    Column(modifier.background(Pal.panel2).clickable { open = true }.padding(8.dp)) {
+        Text("$label ▾", color = Pal.muted, fontSize = 12.sp)
+        Text(e.s("expiry") ?: "—", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Text("${String.format("%.0f", e.d("dte") ?: 0.0)} d" +
+            (e.d("straddle")?.let { " · straddle ${String.format("%,.0f", it)}" } ?: ""), color = Pal.muted, fontSize = 12.sp)
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            exps.forEach { x -> DropdownMenuItem(text = { Text(x) }, onClick = { open = false; onPick(x) }) }
+        }
     }
 }
 

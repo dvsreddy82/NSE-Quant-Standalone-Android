@@ -72,7 +72,7 @@ class ApiRoutes:
         self._first_seen: dict[str, datetime] = {}
         self._chain_locks = {"NIFTY": threading.Lock(), "BANKNIFTY": threading.Lock()}
         self.table = {"/api/health": self.health, "/api/ticker": self.ticker, "/api/overview": self.overview,
-                      "/api/banknifty": self.banknifty, "/api/chain": self.chain, "/api/risk": self.risk,
+                      "/api/banknifty": self.banknifty, "/api/chain": self.chain, "/api/expiry_compare": self.expiry_compare, "/api/risk": self.risk,
                       "/api/fii": self.fii, "/api/positions": self.positions, "/api/alerts": self.alerts,
                       "/api/news": self.news, "/api/global": self.global_markets, "/api/signals": self.signals,
                       "/api/brief": self.brief}
@@ -144,6 +144,16 @@ class ApiRoutes:
                                               for r in s["rows"]],
                 "explained": s["explained"], "up_weight": s["up_weight"], "adv": s["adv"], "dec": s["dec"],
                 "alerts": [{"level": lv, "text": t} for lv, t in s["alerts"]], "fit": s["fit"], "live": s["live"]}
+
+    def expiry_compare(self, q):
+        """Premiums of two expiries side by side: ?und=NIFTY|BANKNIFTY&e1=&e2=&n=10 (defaults: nearest two)."""
+        import expiry_compare
+        und = (q.get("und") or "NIFTY").upper()
+        if und not in self._chain_locks:
+            raise ValueError("und must be NIFTY or BANKNIFTY")
+        with self._chain_locks[und]:
+            return expiry_compare.compare(self.win.options, und, q.get("e1") or None, q.get("e2") or None,
+                                          int(q.get("n") or 10))
 
     def chain(self, q):
         und = (q.get("und") or "NIFTY").upper()
