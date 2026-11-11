@@ -75,7 +75,10 @@ class ApiRoutes:
                       "/api/banknifty": self.banknifty, "/api/chain": self.chain, "/api/expiry_compare": self.expiry_compare, "/api/risk": self.risk,
                       "/api/fii": self.fii, "/api/positions": self.positions, "/api/alerts": self.alerts,
                       "/api/news": self.news, "/api/global": self.global_markets, "/api/signals": self.signals,
-                      "/api/brief": self.brief}
+                      "/api/brief": self.brief, "/api/trade/state": self.trade_state,
+                      "/api/trade/ladder": self.trade_ladder}
+        self.post_table = {"/api/trade/order": self.trade_order, "/api/trade/strategy": self.trade_strategy,
+                           "/api/trade/exit": self.trade_exit, "/api/trade/cancel": self.trade_cancel}
 
     def get(self, path: str):
         """'/api/chain?und=NIFTY' → JSON-safe dict. Raises KeyError for an unknown endpoint."""
@@ -83,6 +86,73 @@ class ApiRoutes:
         route = self.table[url.path]
         q = {k: v[0] for k, v in parse_qs(url.query).items()}
         return _clean(route(q))
+
+    def post(self, path: str, body: dict):
+        """POST endpoints (the option desk's orders from the phone).  Raises KeyError for an unknown endpoint."""
+        return _clean(self.post_table[urlparse(path).path](body or {}))
+
+    # ---------------------------------------------------------------- option desk (trade_engine)
+    def _desk(self):
+        eng = getattr(self.win, "trade_engine", None)
+        if eng is None:
+            raise ValueError("The option desk runs on the Mac app only")
+        return eng
+
+    def trade_state(self, _q):
+        eng = self._desk()
+        st = eng.state()
+        s = st.pop("settings")
+        st["settings"] = {k: s.get(k) for k in ("confirm_live", "phone_orders", "phone_live", "lots", "sl_pct",
+                                                "trail", "mtm_target", "mtm_max_loss", "max_lots_order")}
+        st["phone_can_trade"] = bool(s.get("phone_orders")) and (st["mode"] == "paper" or bool(s.get("phone_live")))
+        return st
+
+    def trade_ladder(self, q):
+        eng = self._desk()
+        und = "BANKNIFTY" if "BANK" in (q.get("und") or "").upper() else "NIFTY"
+        exps = eng.q.expiries(und)
+        exp = q.get("exp") if q.get("exp") in exps else (exps[0] if exps else None)
+        if not exp:
+            raise ValueError(f"No {und} expiries")
+        lad = eng.q.ladder(und, exp, int(q.get("n") or 12))
+        lad["expiries"] = exps
+        lad["lots"] = eng.settings["lots"].get(und, 1)
+        return lad
+
+    def _refused(self, fn):
+        import trade_engine as te
+        try:
+            orders = fn()
+            return {"ok": True, "orders": [{k: o.get(k) for k in ("id", "tsym", "side", "qty", "price", "status", "msg")}
+                                           for o in (orders or []) if o]}
+        except te.OrderRefused as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def trade_order(self, b):
+        eng = self._desk()
+        leg = eng.leg(b["und"], b["exp"], b["kind"], float(b["strike"]), b["side"], int(b.get("lots") or 0) or None)
+        return self._refused(lambda: eng.place([leg], source="phone"))
+
+    def trade_strategy(self, b):
+        eng = self._desk()
+        return self._refused(lambda: eng.place(eng.strategy_legs(
+            b["und"], b["exp"], b["name"], float(b.get("width") or 0), float(b.get("wing") or 0),
+            int(b.get("lots") or 0) or None), source="phone"))
+
+    def trade_exit(self, b):
+        eng = self._desk()
+        s = eng.settings
+        if not s.get("phone_orders"):
+            return {"ok": False, "error": "Orders from the phone are switched off on the Mac (desk settings)"}
+        if b.get("all"):
+            return self._refused(lambda: eng.exit_all("Exit all (phone)", "phone"))
+        return self._refused(lambda: [eng.exit_position(b["tsym"], "phone")])
+
+    def trade_cancel(self, b):
+        eng = self._desk()
+        if not eng.settings.get("phone_orders"):
+            return {"ok": False, "error": "Orders from the phone are switched off on the Mac (desk settings)"}
+        return {"ok": eng.cancel(str(b.get("id")))}
 
     def health(self, _q):
         from market_hours import market_open, now_ist

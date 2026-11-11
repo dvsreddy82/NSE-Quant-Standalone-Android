@@ -17,8 +17,10 @@ Shoonya integration (github.com/marketcalls/openalgo, broker/shoonya):
    "source":"API","accesstoken"} -> "ak"; touchline subscribe {"t":"t","k":"NSE|26000#..."};
    heartbeat {"t":"h"} every 30 s.
 
-Only GenAcsTok, SearchScrip, GetOptionChain, TPSeries (intraday candles), the
-read-only account books and the touchline websocket are used — never an order route.  The password and TOTP are typed on Shoonya's
+This module uses only GenAcsTok, SearchScrip, GetOptionChain, TPSeries (intraday
+candles), the read-only account books and the touchline websocket.  Order routes
+(PlaceOrder / ModifyOrder / CancelOrder) are called from one place only —
+trade_engine.py, the Option selling desk — and only once LIVE is switched on and armed.  The password and TOTP are typed on Shoonya's
 own site, so this app never sees them.  User ID, client ID and secret (and the
 day's access token) are kept in ~/.nse_analytics/shoonya.json, owner-only,
 outside the repo.
