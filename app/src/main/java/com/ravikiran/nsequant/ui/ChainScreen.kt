@@ -71,8 +71,9 @@ fun ChainScreen() {
 private fun ExpiryCompare(und: String) {
     var e1 by rememberSaveable(und) { mutableStateOf("") }
     var e2 by rememberSaveable(und) { mutableStateOf("") }
+    var mode by rememberSaveable(und) { mutableStateOf("") }        // "" = auto: my strikes when I hold positions
     val q = "/api/expiry_compare?und=$und&n=8" + (if (e1.isNotEmpty()) "&e1=$e1" else "") +
-        (if (e2.isNotEmpty()) "&e2=$e2" else "")
+        (if (e2.isNotEmpty()) "&e2=$e2" else "") + (if (mode.isNotEmpty()) "&mode=$mode" else "")
     val st = rememberApi(q.replace(" ", "%20"), 30_000)
     Loading(st) { d ->
         if (d.s("und") != und) return@Loading
@@ -84,6 +85,13 @@ private fun ExpiryCompare(und: String) {
             item {
                 Section {
                     Text("$und ${Fmt.px(d.d("spot"))} · ATM ${Fmt.int(atm)}", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val cur = d.s("mode") ?: "atm"
+                        if (d.optBoolean("has_positions")) {
+                            FilterChip(selected = cur == "mine", onClick = { mode = "mine" }, label = { Text("My strikes") })
+                        }
+                        FilterChip(selected = cur == "atm", onClick = { mode = "atm" }, label = { Text("Around ATM") })
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         ExpiryPick("Near", a, exps, Modifier.weight(1f)) { e1 = it }
                         ExpiryPick("Far", b, exps, Modifier.weight(1f)) { e2 = it }
@@ -100,23 +108,37 @@ private fun ExpiryCompare(und: String) {
             }
             items(d.arr("rows").objects()) { r ->
                 val isAtm = r.d("strike") == atm
-                Row(Modifier.fillMaxWidth().background(if (isAtm) Pal.panel2 else Color.Transparent)
+                val held = r.arr("mine").objects().mapNotNull { m -> m.s("in")?.let { "${m.s("kind")}${it}" } }.toSet()
+                Column(Modifier.fillMaxWidth().background(if (isAtm) Pal.panel2 else Color.Transparent)
                     .padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    val cell = @Composable { v: Double?, c: Color, bold: Boolean ->
-                        Text(v?.let { String.format("%,.1f", it) } ?: "—", Modifier.weight(1f), color = c,
-                            fontSize = 15.sp, textAlign = TextAlign.Center,
-                            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal)
+                    Row(Modifier.fillMaxWidth()) {
+                        val thin = r.arr("no_trades").strings().toSet()
+                        val cell = @Composable { v: Double?, c: Color, key: String ->
+                            val mine = key in held
+                            val f = mapOf("CEe1" to "ce1", "CEe2" to "ce2", "PEe1" to "pe1", "PEe2" to "pe2")[key]
+                            Text((v?.let { String.format("%,.1f", it) } ?: "—") + (if (f in thin) "*" else ""),
+                                Modifier.weight(1f).background(if (mine) Pal.amberBg else Color.Transparent),
+                                color = c, fontSize = 15.sp, textAlign = TextAlign.Center,
+                                fontWeight = if (mine) FontWeight.Bold else FontWeight.Normal)
+                        }
+                        cell(r.d("ce1"), CE, "CEe1")
+                        cell(r.d("ce2"), CE, "CEe2")
+                        Text(Fmt.int(r.d("strike")), Modifier.weight(1f), fontSize = 15.sp, textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold)
+                        cell(r.d("pe1"), PE, "PEe1")
+                        cell(r.d("pe2"), PE, "PEe2")
                     }
-                    cell(r.d("ce1"), CE, false)
-                    cell(r.d("ce2"), CE, false)
-                    Text(Fmt.int(r.d("strike")), Modifier.weight(1f), fontSize = 15.sp, textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Bold)
-                    cell(r.d("pe1"), PE, false)
-                    cell(r.d("pe2"), PE, false)
+                    val mt = r.s("mine_text").orEmpty()
+                    if (mt.isNotEmpty() || isAtm) {
+                        Text(listOfNotNull(mt.takeIf { it.isNotEmpty() }?.let { "You hold: $it" }, if (isAtm) "ATM" else null)
+                            .joinToString(" · "), color = if (mt.isNotEmpty()) Pal.warn else Pal.faint, fontSize = 12.sp,
+                            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    }
                 }
             }
             item {
-                Text("Last traded premiums · far − near is what the extra time costs · refreshes every 30 s",
+                Text("Last traded premiums · highlighted = you hold it · far − near is roughly the credit for " +
+                    "rolling a short leg out at the same strike · * under 20 contracts traded today, price may be old · refreshes every 30 s",
                     color = Pal.faint, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
             }
         }

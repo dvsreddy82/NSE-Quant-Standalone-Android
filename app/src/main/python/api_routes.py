@@ -146,14 +146,16 @@ class ApiRoutes:
                 "alerts": [{"level": lv, "text": t} for lv, t in s["alerts"]], "fit": s["fit"], "live": s["live"]}
 
     def expiry_compare(self, q):
-        """Premiums of two expiries side by side: ?und=NIFTY|BANKNIFTY&e1=&e2=&n=10 (defaults: nearest two)."""
+        """Premiums of two expiries side by side: ?und=NIFTY|BANKNIFTY&e1=&e2=&n=10&mode=mine|atm
+        (mine = your position strikes, the default when you hold positions on the index)."""
         import expiry_compare
         und = (q.get("und") or "NIFTY").upper()
         if und not in self._chain_locks:
             raise ValueError("und must be NIFTY or BANKNIFTY")
+        legs = expiry_compare.my_legs(getattr(self.win.trades, "data", None), und)
         with self._chain_locks[und]:
             return expiry_compare.compare(self.win.options, und, q.get("e1") or None, q.get("e2") or None,
-                                          int(q.get("n") or 10))
+                                          int(q.get("n") or 10), legs, q.get("mode") or None)
 
     def chain(self, q):
         und = (q.get("und") or "NIFTY").upper()
