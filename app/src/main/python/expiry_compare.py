@@ -52,6 +52,28 @@ def my_legs(trades_data: dict | None, und: str) -> list[dict]:
     return out
 
 
+def _leg_left(l: dict, e1: str, e2: str, ce1, ce2, pe1, pe2, k: float, tv, intrinsic, acc: dict) -> dict:
+    """One held leg with its time value left; legs in the near expiry add to the book totals in `acc`."""
+    where = "e1" if l["expiry"] == e1 else "e2" if l["expiry"] == e2 else None
+    near, far = (ce1, ce2) if l["kind"] == "CE" else (pe1, pe2)
+    out = {"kind": l["kind"], "qty": l["qty"], "expiry": l["expiry"], "avg": l["avg"], "in": where,
+           "intrinsic": round(intrinsic(l["kind"], k), 2)}
+    if where == "e1":
+        t1, t2 = tv(near, l["kind"], k), tv(far, l["kind"], k)
+        if t1 is None:
+            acc["missing"] += 1
+        else:
+            rs = abs(l["qty"]) * t1
+            out.update(tv_left=round(t1, 2), tv_left_rs=round(rs), far_tv=None if t2 is None else round(t2, 2))
+            acc["legs"] += 1
+            if l["qty"] < 0:
+                acc["short_rs"] += rs                                     # still to collect as it decays
+                acc["far_short_rs"] += abs(l["qty"]) * (t2 or 0)          # what the same strikes carry in the far expiry
+            else:
+                acc["long_rs"] += rs                                      # still to lose as it decays
+    return out
+
+
 def compare(opts, und: str, e1: str | None = None, e2: str | None = None, n: int = 10,
             legs: list[dict] | None = None, mode: str | None = None) -> dict:
     """und: NIFTY / BANKNIFTY; e1, e2: expiries (default: your positions' expiry and the next one, else the nearest
@@ -85,7 +107,21 @@ def compare(opts, und: str, e1: str | None = None, e2: str | None = None, n: int
         v = (rows.get(k) or {}).get(f)
         return float(v) if v else None
 
+    def intrinsic(kind: str, k: float) -> float:
+        return max(spot - k, 0.0) if kind == "CE" else max(k - spot, 0.0)
+
+    def tv(price: float | None, kind: str, k: float) -> float | None:
+        """Time value = premium − intrinsic value (what can still decay before expiry).  None when the price is
+        below intrinsic value by more than 0.5% — an old last price, not a real quote."""
+        if price is None:
+            return None
+        iv = intrinsic(kind, k)
+        if price < iv * 0.995 - 1:
+            return None
+        return max(price - iv, 0.0)
+
     rows = []
+    left = {"short_rs": 0.0, "long_rs": 0.0, "far_short_rs": 0.0, "legs": 0, "missing": 0}
     for k in strikes:
         ce1, ce2, pe1, pe2 = px(p1, k, "ce_ltp"), px(p2, k, "ce_ltp"), px(p1, k, "pe_ltp"), px(p2, k, "pe_ltp")
         mine = [l for l in legs if l["strike"] == k]
@@ -94,17 +130,26 @@ def compare(opts, und: str, e1: str | None = None, e2: str | None = None, n: int
         rows.append({"strike": k, "ce1": ce1, "ce2": ce2, "ce_diff": (ce2 - ce1) if ce1 and ce2 else None,
                      "pe1": pe1, "pe2": pe2, "pe_diff": (pe2 - pe1) if pe1 and pe2 else None,
                      "atm": k == atm, "no_trades": thin,
-                     "mine": [{"kind": l["kind"], "qty": l["qty"], "expiry": l["expiry"], "avg": l["avg"],
-                               "in": "e1" if l["expiry"] == e1 else "e2" if l["expiry"] == e2 else None}
-                              for l in mine],
+                     "mine": [_leg_left(l, e1, e2, ce1, ce2, pe1, pe2, k, tv, intrinsic, left) for l in mine],
+                     "tv": {"ce1": tv(ce1, "CE", k), "ce2": tv(ce2, "CE", k), "pe1": tv(pe1, "PE", k),
+                            "pe2": tv(pe2, "PE", k)},
                      "mine_text": ", ".join(f"{l['qty']:+d} {l['kind']} {str(l['expiry'] or '')[:6]}" for l in mine)})
 
     def straddle(rs: dict) -> float | None:
         r = rs.get(atm) or {}
         return (r["ce_ltp"] + r["pe_ltp"]) if r.get("ce_ltp") and r.get("pe_ltp") else None
 
+    dte1 = max(float(c1.get("dte") or 0), 0.5)
+    net = left["short_rs"] - left["long_rs"]
+    summary = None
+    if left["legs"]:
+        summary = {"expiry": e1, "dte": c1.get("dte"), "short_rs": round(left["short_rs"]),
+                   "long_rs": round(left["long_rs"]), "net_rs": round(net), "per_day_rs": round(net / dte1),
+                   "far_expiry": e2, "far_short_rs": round(left["far_short_rs"]),
+                   "roll_extra_rs": round(left["far_short_rs"] - left["short_rs"]),
+                   "legs": left["legs"], "missing": left["missing"]}
     return {"und": und, "spot": spot, "atm": atm, "expiries": expiries[:8], "lot": c1.get("lot"), "mode": mode,
-            "has_positions": bool(legs),
+            "has_positions": bool(legs), "time_value_left": summary,
             "e1": {"expiry": e1, "dte": c1.get("dte"), "straddle": straddle(p1), "atm_iv": c1.get("atm_iv")},
             "e2": {"expiry": e2, "dte": c2.get("dte"), "straddle": straddle(p2), "atm_iv": c2.get("atm_iv")},
             "rows": rows, "source": c1.get("source"), "as_of": str(c1.get("timestamp"))}

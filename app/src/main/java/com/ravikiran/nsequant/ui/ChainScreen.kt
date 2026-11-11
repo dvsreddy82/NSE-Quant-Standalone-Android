@@ -98,6 +98,21 @@ private fun ExpiryCompare(und: String) {
                     }
                 }
             }
+            d.obj("time_value_left")?.let { t ->
+                item {
+                    val net = t.d("net_rs") ?: 0.0
+                    Section("Premium left in ${t.s("expiry")} (${String.format("%.0f", t.d("dte") ?: 0.0)} d)") {
+                        KV("Short legs — still to decay for you", Fmt.rupees(t.d("short_rs")).removePrefix("+"))
+                        KV("Long legs — still to decay against you", Fmt.rupees(t.d("long_rs")).removePrefix("+"))
+                        KV("Net if the index stays here", "${Fmt.rupees(net)}  (${Fmt.rupees(t.d("per_day_rs"))}/day)",
+                            Pal.chg(net))
+                        Text("Carrying forward: the same short strikes in ${t.s("far_expiry")} carry " +
+                            "${Fmt.rupees(t.d("far_short_rs")).removePrefix("+")} of time value " +
+                            "(${Fmt.rupees(t.d("roll_extra_rs"))} vs now), before costs and the bid/ask.",
+                            color = Pal.muted, fontSize = 13.sp)
+                    }
+                }
+            }
             item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
                     listOf("CE near", "CE far", "Strike", "PE near", "PE far").forEach {
@@ -129,8 +144,11 @@ private fun ExpiryCompare(und: String) {
                         cell(r.d("pe2"), PE, "PEe2")
                     }
                     val mt = r.s("mine_text").orEmpty()
+                    val tvs = r.arr("mine").objects().mapNotNull { m ->
+                        m.d("tv_left")?.let { "time value left ${String.format("%,.1f", it)} (₹${Fmt.int(m.d("tv_left_rs"))})" } }
                     if (mt.isNotEmpty() || isAtm) {
-                        Text(listOfNotNull(mt.takeIf { it.isNotEmpty() }?.let { "You hold: $it" }, if (isAtm) "ATM" else null)
+                        Text(listOfNotNull(mt.takeIf { it.isNotEmpty() }?.let { "You hold: $it" },
+                            tvs.joinToString("; ").takeIf { it.isNotEmpty() }, if (isAtm) "ATM" else null)
                             .joinToString(" · "), color = if (mt.isNotEmpty()) Pal.warn else Pal.faint, fontSize = 12.sp,
                             textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     }
