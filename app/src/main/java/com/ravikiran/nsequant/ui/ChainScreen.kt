@@ -86,11 +86,12 @@ private fun ExpiryCompare(und: String) {
                 Section {
                     Text("$und ${Fmt.px(d.d("spot"))} · ATM ${Fmt.int(atm)}", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val cur = d.s("mode") ?: "atm"
+                        val cur = d.s("mode") ?: "range"
+                        FilterChip(selected = cur == "range", onClick = { mode = "range" },
+                            label = { Text("Range ±${Fmt.int(d.d("range_pts"))}") })
                         if (d.optBoolean("has_positions")) {
-                            FilterChip(selected = cur == "mine", onClick = { mode = "mine" }, label = { Text("My strikes") })
+                            FilterChip(selected = cur == "mine", onClick = { mode = "mine" }, label = { Text("Only my strikes") })
                         }
-                        FilterChip(selected = cur == "atm", onClick = { mode = "atm" }, label = { Text("Around ATM") })
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         ExpiryPick("Near", a, exps, Modifier.weight(1f)) { e1 = it }
