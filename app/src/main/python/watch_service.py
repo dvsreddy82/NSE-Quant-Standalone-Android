@@ -11,6 +11,7 @@ on the GUI thread.
 from __future__ import annotations
 
 import logging
+import time
 import threading
 from datetime import datetime
 
@@ -69,9 +70,21 @@ class WatchService:
                 self.store.upsert_docs("market_alerts", docs)
             except Exception as exc:
                 log.warning("market_alerts not stored: %s", exc)
+            self.__dict__.pop("_alerts_cache", None)          # new alerts: re-read next time
         return new
 
     def recent_alerts(self, days: int = 1, kinds=("GLOBAL", "LEVEL")) -> list[dict]:
+        """Read at most every 30 s (the signals screen asks on the GUI thread); new alerts clear the cache."""
+        cache = self.__dict__.setdefault("_alerts_cache", {})
+        key = (days, tuple(kinds))
+        hit = cache.get(key)
+        if hit and time.time() - hit[0] < 30:
+            return list(hit[1])
+        out = self._read_alerts(days, kinds)
+        cache[key] = (time.time(), out)
+        return list(out)
+
+    def _read_alerts(self, days: int, kinds) -> list[dict]:
         out = []
         for i in range(days):
             day = str((pd.Timestamp.now(tz=config.IST) - pd.Timedelta(days=i)).date())
@@ -272,8 +285,15 @@ class WatchService:
         c = self.calls.get(und)
         if c:
             return c
+        # no call made in this session: read today's from the store at most once a minute (the screens ask several
+        # times per refresh, on the GUI thread)
+        cache = self.__dict__.setdefault("_latest_cache", {})
+        hit = cache.get(und)
+        if hit and time.time() - hit[0] < 60:
+            return hit[1]
         docs = self.today_calls(und)
-        return docs[-1] if docs else None
+        cache[und] = (time.time(), docs[-1] if docs else None)
+        return cache[und][1]
 
     @staticmethod
     def hit_rate(calls: list[dict]) -> tuple[int, int]:

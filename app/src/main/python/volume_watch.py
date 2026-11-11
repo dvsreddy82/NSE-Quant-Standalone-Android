@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time as dtime
 
@@ -282,6 +283,9 @@ class VolumeWatch:
     def latest(self) -> dict | None:
         if self.last:
             return self.last
+        if time.time() - getattr(self, "_looked_at", 0) < 60:      # nothing stored yet: look again in a minute
+            return None
+        self._looked_at = time.time()
         try:
             docs = self.store.find_docs("volume_summary", sort="day", desc=True, limit=1)
         except Exception:
